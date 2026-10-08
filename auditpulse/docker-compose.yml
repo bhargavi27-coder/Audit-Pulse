@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────────
+  # AuditPulse Backend (FastAPI)
+  # ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: auditpulse-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://auditpulse:auditpulse_password@postgres:5432/auditpulse
+      - DATABASE_SYNC_URL=postgresql://auditpulse:auditpulse_password@postgres:5432/auditpulse
+      - AI_PROVIDER=${AI_PROVIDER:-mock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost:80
+      - APP_ENV=production
+      - PLAYWRIGHT_HEADLESS=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - auditpulse-net
+
+  # ─────────────────────────────────────────────
+  # AuditPulse Frontend (Vite/React)
+  # ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: auditpulse-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - auditpulse-net
+
+  # ─────────────────────────────────────────────
+  # PostgreSQL Database
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: auditpulse-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=auditpulse
+      - POSTGRES_PASSWORD=auditpulse_password
+      - POSTGRES_DB=auditpulse
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auditpulse -d auditpulse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - auditpulse-net
+
+volumes:
+  postgres_data:
+
+networks:
+  auditpulse-net:
+    driver: bridge

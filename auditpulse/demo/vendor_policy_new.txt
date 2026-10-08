@@ -1,0 +1,47 @@
+AnalyticsPro Data Processing Agreement
+Version 2.0 | UPDATED: September 2025
+
+IMPORTANT NOTICE: This agreement has been updated. Please review all changes carefully.
+
+SECTION 1 — DEFINITIONS
+Customer: Any entity using AnalyticsPro services under a valid subscription agreement.
+Personal Data: Information that can directly or indirectly identify a natural person.
+Aggregated Data: Data combined across multiple customers that cannot identify individuals.
+
+SECTION 2 — DATA PROCESSING
+AnalyticsPro processes Customer Data to provide contracted services AND to improve
+our analytics platform and develop new features.
+
+SECTION 3 — DATA CATEGORIES
+We process the following categories of Customer data:
+- Usage analytics and behavioral data
+- Session identifiers
+- Device and browser information
+- Customer-provided user identifiers
+- Email addresses for product communication and analytics (NEW)
+- Geographic location data (NEW)
+
+SECTION 4 — DATA RETENTION (CHANGED)
+4.1 Active Data: Customer data is retained while the subscription is active.
+4.2 Post-Termination: Customer data retained for 180 days after contract termination.
+       [CHANGED FROM 30 DAYS TO 180 DAYS]
+4.3 Backups: Encrypted backups are retained for 180 days. [CHANGED FROM 30 DAYS]
+4.4 Aggregated and anonymized data derived from Customer data may be retained indefinitely.
+4.5 Email addresses retained for up to 365 days for re-engagement purposes. (NEW)
+
+SECTION 5 — DATA SHARING (CHANGED)
+5.1 AnalyticsPro may share aggregated Customer Data with our analytics partners for
+    benchmarking and product improvement purposes.
+5.2 Customer email addresses may be used for service delivery, product updates,
+    and to improve our analytics product suite. (EXPANDED)
+5.3 Aggregated data may be shared with third-party analytics and business intelligence
+    partners under appropriate data sharing agreements. (NEW)
+5.4 AnalyticsPro participates in a data consortium with select technology partners. (NEW)
+
+SECTION 6 — SECURITY
+Industry-standard encryption is applied to all stored Customer data.
+Access controls are implemented for authorized personnel.
+
+SECTION 7 — GDPR COMPLIANCE
+AnalyticsPro operates under legitimate interest as a legal basis for certain analytics
+processing activities, in addition to contractual necessity. (CHANGED)

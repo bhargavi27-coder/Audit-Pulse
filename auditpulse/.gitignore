@@ -1,0 +1,26 @@
+# Environment variables & secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+.venv/
+env/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+auditpulse.db
+backend/auditpulse.db
+*.log
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/node_modules/
+.vite/

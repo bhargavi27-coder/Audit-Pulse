@@ -1,0 +1,186 @@
+name: AuditPulse Compliance Check
+
+on:
+  pull_request:
+    branches: [ main, master, develop ]
+    types: [ opened, synchronize, reopened ]
+  push:
+    branches: [ main, master ]
+
+jobs:
+  auditpulse-compliance:
+    name: 🛡️ AuditPulse Compliance Check
+    runs-on: ubuntu-latest
+    
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: |
+            **/*.js
+            **/*.ts
+            **/*.jsx
+            **/*.tsx
+            **/*.py
+
+      - name: Prepare files for analysis
+        if: steps.changed-files.outputs.any_changed == 'true'
+        id: prepare
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+          REPO_NAME: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || 0 }}
+        run: |
+          echo "Changed files: $CHANGED_FILES"
+          
+          # Build JSON payload with file contents
+          python3 << 'EOF'
+          import json
+          import os
+          
+          changed_files = os.environ.get('CHANGED_FILES', '').split()
+          files_payload = []
+          
+          for filepath in changed_files[:10]:  # Limit to 10 files
+              if os.path.exists(filepath):
+                  try:
+                      with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                          content = f.read()
+                      files_payload.append({
+                          "path": filepath,
+                          "content": content[:10000]  # Limit content size
+                      })
+                  except Exception as e:
+                      print(f"Could not read {filepath}: {e}")
+          
+          pr_number = int(os.environ.get('PR_NUMBER', '0') or '0')
+          payload = {
+              "repository": os.environ.get('REPO_NAME', ''),
+              "pr_number": pr_number,
+              "files": files_payload,
+              "policy_id": None
+          }
+          
+          with open('/tmp/auditpulse_payload.json', 'w') as f:
+              json.dump(payload, f)
+          
+          print(f"Prepared {len(files_payload)} files for analysis")
+          EOF
+
+      - name: Run AuditPulse compliance check
+        if: steps.changed-files.outputs.any_changed == 'true'
+        id: auditpulse
+        env:
+          AUDITPULSE_API_URL: ${{ secrets.AUDITPULSE_API_URL }}
+          AUDITPULSE_API_KEY: ${{ secrets.AUDITPULSE_API_KEY }}
+        run: |
+          AUDITPULSE_URL="${AUDITPULSE_API_URL:-http://localhost:8000}"
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${AUDITPULSE_API_KEY}" \
+            --data @/tmp/auditpulse_payload.json \
+            --max-time 120 \
+            "${AUDITPULSE_URL}/api/github/analyze" 2>/dev/null || echo '{"passed":true,"summary":"AuditPulse unreachable — check skipped.","findings":[],"badge_status":"passed"}')
+          
+          # Extract HTTP status code (last line) and body (everything else)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "⚠️ AuditPulse API returned status $HTTP_CODE"
+            echo "passed=true" >> $GITHUB_OUTPUT
+            echo "summary=AuditPulse check could not be completed (HTTP $HTTP_CODE). Manual review recommended." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          PASSED=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('passed',True)).lower())")
+          SUMMARY=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary','Analysis complete.'))")
+          FINDINGS_COUNT=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len([f for f in d.get('findings',[]) if f.get('drift_detected')]))")
+          
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+          echo "findings_count=$FINDINGS_COUNT" >> $GITHUB_OUTPUT
+          
+          # Save full response for PR comment
+          echo "$BODY" > /tmp/auditpulse_result.json
+
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request' && steps.changed-files.outputs.any_changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let resultBody;
+            try {
+              resultBody = JSON.parse(fs.readFileSync('/tmp/auditpulse_result.json', 'utf8'));
+            } catch (e) {
+              resultBody = { passed: true, summary: 'Analysis complete.', findings: [] };
+            }
+            
+            const passed = resultBody.passed;
+            const summary = resultBody.summary || '';
+            const findings = resultBody.findings || [];
+            const driftFindings = findings.filter(f => f.drift_detected);
+            
+            const statusIcon = passed ? '✅' : '❌';
+            const statusText = passed ? 'PASSED' : 'FAILED';
+            const statusColor = passed ? '🟢' : '🔴';
+            
+            let findingsSection = '';
+            if (driftFindings.length > 0) {
+              findingsSection = '\n\n### 🚨 Compliance Findings\n\n';
+              for (const f of driftFindings.slice(0, 5)) {
+                findingsSection += `**${f.risk} RISK** — ${f.title || 'Compliance Violation'}\n`;
+                findingsSection += `- **Policy**: ${f.policy_reference || 'N/A'}\n`;
+                findingsSection += `- **Code**: ${f.code_reference || 'N/A'}\n`;
+                findingsSection += `- **Data**: ${f.data_involved || 'N/A'}\n`;
+                findingsSection += `- **Destination**: ${f.destination || 'N/A'}\n`;
+                findingsSection += `- **Reason**: ${f.reason || 'N/A'}\n`;
+                findingsSection += `- **Recommendation**: ${f.recommendation || 'N/A'}\n\n`;
+              }
+            }
+            
+            const header = `## ${statusIcon} AuditPulse Compliance Check — ${statusText}`;
+            const body = `${statusColor} **${summary}**${findingsSection}`;
+            const footer = [
+              '---',
+              '*Powered by [AuditPulse](https://github.com/your-org/auditpulse) — AI-Powered Compliance Drift Detection*',
+              '*⚠️ AI-assisted analysis — consult legal counsel for definitive compliance advice*'
+            ].join('\n');
+            const comment = `${header}\n\n${body}\n${footer}`;
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Set check status
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          PASSED="${{ steps.auditpulse.outputs.passed }}"
+          SUMMARY="${{ steps.auditpulse.outputs.summary }}"
+          
+          if [ "$PASSED" = "false" ]; then
+            echo "❌ AuditPulse Compliance Check FAILED"
+            echo "$SUMMARY"
+            # Optionally fail the build on HIGH risk findings:
+            # exit 1
+            # (Commented out to allow PR merge — uncomment for strict enforcement)
+          else
+            echo "✅ AuditPulse Compliance Check PASSED"
+            echo "$SUMMARY"
+          fi

@@ -1,0 +1,36 @@
+AnalyticsPro Data Processing Agreement
+Version 1.2 | Effective January 2024
+
+SECTION 1 — DEFINITIONS
+Customer: Any entity using AnalyticsPro services under a valid subscription agreement.
+Personal Data: Information that can identify a natural person.
+
+SECTION 2 — DATA PROCESSING
+AnalyticsPro processes Customer Data solely to provide the contracted services.
+We act as a data processor on behalf of our Customers.
+
+SECTION 3 — DATA CATEGORIES
+We process the following categories of Customer data:
+- Usage analytics and behavioral data
+- Session identifiers
+- Device and browser information
+- Customer-provided user identifiers
+
+SECTION 4 — DATA RETENTION
+4.1 Active Data: Customer data is retained while the subscription is active.
+4.2 Post-Termination: Customer data retained for 30 days after contract termination.
+4.3 Backups: Encrypted backups are retained for 30 days only.
+4.4 All data is permanently deleted after the 30-day retention period.
+
+SECTION 5 — DATA SHARING
+5.1 AnalyticsPro does not share Customer Data with advertising networks.
+5.2 Customer email addresses are used only for account management and service delivery.
+5.3 Data is not shared with any third-party commercial partners.
+
+SECTION 6 — SECURITY
+Industry-standard encryption (AES-256) is applied to all stored Customer data.
+Access is limited to authorized personnel only.
+
+SECTION 7 — GDPR COMPLIANCE
+AnalyticsPro is fully compliant with GDPR Article 28 requirements for data processors.
+A Data Processing Agreement (DPA) is available upon request.
