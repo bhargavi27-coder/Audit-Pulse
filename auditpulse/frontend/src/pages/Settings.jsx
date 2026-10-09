@@ -7,7 +7,7 @@ import { formatDate } from '../utils/helpers';
 import {
   Settings as SettingsIcon, Cpu, Key, Shield, GitBranch,
   Save, RefreshCw, CheckCircle2, AlertCircle, Database, Server,
-  Globe, Terminal, Check, Brain, Trash2, Plus, Filter, Sparkles
+  Globe, Terminal, Check, Brain, Trash2, Plus, Filter
 } from 'lucide-react';
 
 export default function Settings() {
@@ -61,7 +61,7 @@ export default function Settings() {
     }
   }, []);
 
-  const testConnection = async () => {
+  const testConnection = useCallback(async () => {
     setSystemStatus(prev => ({ ...prev, testing: true }));
     const start = performance.now();
     try {
@@ -83,12 +83,12 @@ export default function Settings() {
       });
       showToast('Could not connect to AuditPulse backend API: ' + err.message, 'error');
     }
-  };
+  }, [showToast]);
 
   useEffect(() => {
     testConnection();
     fetchFeedbackRules();
-  }, [fetchFeedbackRules]);
+  }, [testConnection, fetchFeedbackRules]);
 
   const handleSave = (e) => {
     e.preventDefault();

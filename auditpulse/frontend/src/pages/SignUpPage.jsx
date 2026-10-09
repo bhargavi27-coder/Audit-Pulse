@@ -115,7 +115,9 @@ export default function SignUpPage() {
   const inputStyle = {
     width: '100%',
     padding: '0.8rem 1rem',
-    border: '1.5px solid #e2e8f0',
+    borderWidth: '1.5px',
+    borderStyle: 'solid',
+    borderColor: '#e2e8f0',
     borderRadius: 10,
     fontSize: '0.95rem',
     fontFamily: "'Outfit', sans-serif",

@@ -7,6 +7,8 @@ from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
 
+from app.config import settings
+
 # ===== Password hashing =====
 def hash_password(plain_password: str) -> str:
     """Return a bcrypt hash of the plaintext password."""

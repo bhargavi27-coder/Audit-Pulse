@@ -5,8 +5,8 @@ import { RiskBadge, ToastContainer } from '../components/shared';
 import { useToast } from '../hooks/useAsync';
 import {
   Upload, FileText, Sparkles, ChevronDown, ChevronUp,
-  AlertCircle, CheckCircle, Shield, ArrowRight, GitCompare,
-  PlusCircle, MinusCircle, RefreshCw, AlertTriangle
+  ArrowRight, GitCompare,
+  PlusCircle, MinusCircle, RefreshCw
 } from 'lucide-react';
 
 const DEMO_POLICY_V1 = `AuditCorp Privacy Policy — Version 1.0
@@ -61,7 +61,7 @@ export default function PolicyAnalysis() {
       if (res.data.length > 0 && !comparePolicyA) {
         setComparePolicyA(res.data[0].id.toString());
       }
-    } catch (e) {
+    } catch (_e) {
       // ignore
     }
   }, [comparePolicyA]);

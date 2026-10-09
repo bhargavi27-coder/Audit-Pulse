@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { getRiskClass, getRiskIcon, formatDate } from '../utils/helpers';
 import {
-  X, ExternalLink, AlertTriangle, CheckCircle, Shield,
-  Copy, Check, FileText, Code2, Sparkles, ArrowRight,
-  UserCheck, ThumbsUp, ThumbsDown, ShieldAlert, Wrench,
-  Clock, GitPullRequest, ArrowUpRight, HelpCircle
+  X, AlertTriangle, CheckCircle,
+  Copy, Check, FileText, Code2, Sparkles,
+  UserCheck, ThumbsUp, ThumbsDown, ShieldAlert, Wrench
 } from 'lucide-react';
 import { findingsApi } from '../services/api';
 
@@ -120,7 +119,7 @@ export function ConfidenceMeter({ value }) {
 /**
  * Compliance Lifecycle Stepper: Detected -> Reviewed -> Remediating -> Fixed & Verified
  */
-export function ComplianceTimelineStepper({ timelines = [], status = 'open' }) {
+export function ComplianceTimelineStepper({ timelines: _timelines = [], status = 'open' }) {
   const stages = [
     { key: 'detected', label: '1. Detected', icon: ShieldAlert, desc: 'AI Sentinel Scan' },
     { key: 'reviewed', label: '2. Reviewed', icon: UserCheck, desc: 'Legal/Security' },
@@ -648,7 +647,7 @@ export function FindingModal({ finding, onClose, onReviewComplete }) {
                 className="btn btn-primary"
                 onClick={() => handleReview('approve')}
                 disabled={reviewing}
-                style={{ background: 'var(--risk-high)', borderColor: 'var(--risk-high)', fontSize: '0.78rem' }}
+                style={{ background: 'var(--risk-high)', border: '1px solid var(--risk-high)', fontSize: '0.78rem' }}
               >
                 <ThumbsDown size={14} /> Approve Violation (Flag for Engineering)
               </button>
@@ -663,7 +662,7 @@ export function FindingModal({ finding, onClose, onReviewComplete }) {
                   }
                 }}
                 disabled={reviewing}
-                style={{ borderColor: 'var(--risk-medium)', color: 'var(--risk-medium)', fontSize: '0.78rem' }}
+                style={{ border: '1px solid var(--risk-medium)', color: 'var(--risk-medium)', fontSize: '0.78rem' }}
               >
                 <ThumbsUp size={14} /> Reject (False Positive & Feed AI)
               </button>
@@ -681,7 +680,7 @@ export function FindingModal({ finding, onClose, onReviewComplete }) {
                 className="btn btn-secondary"
                 onClick={() => handleReview('resolve')}
                 disabled={reviewing}
-                style={{ color: 'var(--risk-compliant)', borderColor: 'var(--risk-compliant)', fontSize: '0.78rem' }}
+                style={{ color: 'var(--risk-compliant)', border: '1px solid var(--risk-compliant)', fontSize: '0.78rem' }}
               >
                 <CheckCircle size={14} /> Mark as Fixed & Remediated
               </button>
