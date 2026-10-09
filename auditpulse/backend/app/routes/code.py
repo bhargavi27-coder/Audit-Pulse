@@ -5,7 +5,7 @@ POST /api/code/upload    — Upload source file for analysis
 GET  /api/code           — List all code analyses
 GET  /api/code/{id}      — Get analysis by ID
 """
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -13,7 +13,7 @@ from sqlalchemy import select, desc
 from app.database import get_db
 from app.models.models import CodeAnalysis
 from app.schemas.schemas import (
-    CodeAnalyzeRequest, CodeAnalyzeResponse, CodeBehavior, SupportedLanguage
+    CodeAnalyzeRequest, CodeAnalyzeResponse, CodeBehavior, DataFlow, SupportedLanguage
 )
 from app.agents.code_agent import code_agent
 from app.config import settings
@@ -45,8 +45,24 @@ async def _run_and_save(
 
 
 def _behavior_to_schema(behavior: dict) -> CodeBehavior:
-    """Map raw behavior dict to Pydantic schema."""
+    """Map raw behavior dict to Pydantic schema with affected components and data flows."""
     findings = behavior.get("findings", [])
+    raw_flows = behavior.get("data_flows", [])
+
+    data_flows = []
+    for f in raw_flows:
+        if isinstance(f, dict):
+            data_flows.append(DataFlow(
+                id=f.get("id", "DF-01"),
+                source=f.get("source", "User Input"),
+                transform=f.get("transform"),
+                sink=f.get("sink", "External SDK"),
+                data_sensitivity=f.get("data_sensitivity", "PII / High"),
+                consent_guarded=bool(f.get("consent_guarded", False)),
+                component=f.get("component", "Application Controller"),
+                line=f.get("line"),
+            ))
+
     return CodeBehavior(
         data_types=behavior.get("sensitive_data", []),
         actions=behavior.get("actions", []),
@@ -57,6 +73,8 @@ def _behavior_to_schema(behavior: dict) -> CodeBehavior:
         network_requests=behavior.get("network_requests", []),
         logging_events=behavior.get("logging_events", []),
         storage_operations=behavior.get("storage_operations", []),
+        affected_components=behavior.get("affected_components", []),
+        data_flows=data_flows,
         findings_raw=findings,
     )
 
@@ -66,7 +84,7 @@ async def analyze_code(
     request: CodeAnalyzeRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Analyze source code for compliance-relevant behaviors."""
+    """Analyze source code for compliance-relevant behaviors, affected components, and data flows."""
     analysis, behavior = await _run_and_save(
         db=db,
         content=request.content,

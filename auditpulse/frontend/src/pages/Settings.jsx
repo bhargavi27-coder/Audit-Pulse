@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { ToastContainer } from '../components/shared';
+import { complianceApi } from '../services/api';
+import { ToastContainer, LoadingSkeleton } from '../components/shared';
 import { useToast } from '../hooks/useAsync';
+import { formatDate } from '../utils/helpers';
 import {
   Settings as SettingsIcon, Cpu, Key, Shield, GitBranch,
   Save, RefreshCw, CheckCircle2, AlertCircle, Database, Server,
-  Globe, Terminal, Check
+  Globe, Terminal, Check, Brain, Trash2, Plus, Filter, Sparkles
 } from 'lucide-react';
 
 export default function Settings() {
@@ -43,6 +45,21 @@ export default function Settings() {
   });
 
   const [showKey, setShowKey] = useState(false);
+  const [feedbackRules, setFeedbackRules] = useState([]);
+  const [loadingRules, setLoadingRules] = useState(true);
+  const [newRule, setNewRule] = useState({ pattern: '', reason: '', action: 'IGNORE_SINK' });
+  const [showAddRuleModal, setShowAddRuleModal] = useState(false);
+
+  const fetchFeedbackRules = useCallback(async () => {
+    try {
+      const res = await complianceApi.getFeedback();
+      setFeedbackRules(res.data || []);
+    } catch (err) {
+      console.warn('Could not load feedback rules:', err);
+    } finally {
+      setLoadingRules(false);
+    }
+  }, []);
 
   const testConnection = async () => {
     setSystemStatus(prev => ({ ...prev, testing: true }));
@@ -70,7 +87,8 @@ export default function Settings() {
 
   useEffect(() => {
     testConnection();
-  }, []);
+    fetchFeedbackRules();
+  }, [fetchFeedbackRules]);
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -86,6 +104,39 @@ export default function Settings() {
         [key]: !prev.frameworks[key],
       }
     }));
+  };
+
+  const handleCreateRule = async (e) => {
+    e.preventDefault();
+    if (!newRule.pattern.trim() || !newRule.reason.trim()) {
+      showToast('Please provide both pattern identifier and feedback rationale', 'warning');
+      return;
+    }
+    try {
+      await complianceApi.submitFeedback({
+        rule_or_sink_pattern: newRule.pattern,
+        feedback_type: 'FALSE_POSITIVE',
+        explanation: newRule.reason,
+        action: newRule.action,
+        user: 'Security Admin'
+      });
+      showToast('Learned AI suppression rule recorded!', 'success');
+      setNewRule({ pattern: '', reason: '', action: 'IGNORE_SINK' });
+      setShowAddRuleModal(false);
+      fetchFeedbackRules();
+    } catch (err) {
+      showToast('Error saving feedback rule: ' + (err.userMessage || err.message), 'error');
+    }
+  };
+
+  const handleDeleteRule = async (id) => {
+    try {
+      await complianceApi.deleteFeedback(id);
+      showToast('Suppression rule removed from AI memory', 'info');
+      fetchFeedbackRules();
+    } catch (err) {
+      showToast('Error deleting rule: ' + (err.userMessage || err.message), 'error');
+    }
   };
 
   return (
@@ -110,8 +161,8 @@ export default function Settings() {
             <span className="gradient-text">System & AI Engine Configuration</span>
           </h1>
           <p>
-            Configure multi-agent AI providers, Playwright headless browser parameters, compliance framework targets,
-            and CI/CD GitHub Actions parameters.
+            Configure multi-agent LLM providers, false-positive AI feedback memory loops, Playwright headless browser runners,
+            and CI/CD GitHub Actions PR gating parameters.
           </p>
         </div>
 
@@ -164,6 +215,101 @@ export default function Settings() {
       </div>
 
       <form onSubmit={handleSave}>
+        {/* AI Feedback Loop & Learned Memory Section (Requirement 11) */}
+        <div className="card" style={{ padding: '1.5rem', marginBottom: '1.75rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: 'var(--gradient-primary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Brain size={18} color="white" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, fontFamily: 'Outfit, sans-serif' }}>
+                  AI Feedback Memory & Learned Suppression Rules (Requirement 11)
+                </h3>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Continuous reinforcement memory: False positives marked during human review train future scans
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAddRuleModal(true)}
+              className="btn btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem' }}
+            >
+              <Plus size={14} /> Add AI Rule
+            </button>
+          </div>
+
+          {loadingRules ? (
+            <LoadingSkeleton count={2} height={60} />
+          ) : feedbackRules.length === 0 ? (
+            <div style={{
+              padding: '1.5rem',
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px dashed var(--border)',
+              borderRadius: 10,
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              fontSize: '0.85rem'
+            }}>
+              No false-positive suppression rules stored yet. Rejecting or marking a finding as False Positive in Drift Detection will automatically create memory rules here.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {feedbackRules.map((rule) => (
+                <div
+                  key={rule.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 10,
+                    fontSize: '0.825rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span className="badge badge-medium" style={{ fontSize: '0.7rem' }}>
+                      {rule.action || 'SUPPRESSED'}
+                    </span>
+                    <div>
+                      <strong style={{ color: 'var(--accent-cyan-bright)', fontFamily: 'JetBrains Mono, monospace' }}>
+                        {rule.rule_or_sink_pattern}
+                      </strong>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: 2 }}>
+                        Rationale: {rule.explanation}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      Learned: {formatDate(rule.created_at)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRule(rule.id)}
+                      className="btn btn-secondary"
+                      style={{ padding: '0.3rem 0.5rem', color: 'var(--risk-high-light)' }}
+                      title="Forget this rule"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Playwright Browser Engine Settings */}
         <div className="card" style={{ padding: '1.5rem', marginBottom: '1.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1.25rem' }}>
@@ -489,6 +635,80 @@ export default function Settings() {
           </button>
         </div>
       </form>
+
+      {/* Add Custom Suppression Rule Modal */}
+      {showAddRuleModal && (
+        <div className="modal-overlay" onClick={() => setShowAddRuleModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <Brain size={20} color="var(--accent-indigo)" />
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>Create Learned AI Rule</h3>
+              </div>
+              <button onClick={() => setShowAddRuleModal(false)} className="btn btn-secondary" style={{ padding: '0.35rem' }}>
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateRule}>
+              <div className="modal-body">
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                    Rule or Code Sink Pattern (e.g. function name, file path, regex) *
+                  </label>
+                  <input
+                    type="text"
+                    className="input font-mono"
+                    placeholder="e.g. logger.info, src/internal/mock.ts, mixpanel.track"
+                    value={newRule.pattern}
+                    onChange={(e) => setNewRule({ ...newRule, pattern: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                    Action to take upon match *
+                  </label>
+                  <select
+                    className="select"
+                    style={{ width: '100%' }}
+                    value={newRule.action}
+                    onChange={(e) => setNewRule({ ...newRule, action: e.target.value })}
+                  >
+                    <option value="IGNORE_SINK">Ignore Sink (Mark as Compliant)</option>
+                    <option value="DOWNGRADE_SEVERITY">Downgrade to LOW Severity</option>
+                    <option value="FLAG_FOR_REVIEW">Flag for Manual Legal Review Only</option>
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                    Suppression Rationale & Legal Justification *
+                  </label>
+                  <textarea
+                    className="textarea"
+                    rows={3}
+                    placeholder="Explain why this sink does not violate customer privacy policy (e.g. local pseudonymized logs)..."
+                    value={newRule.reason}
+                    onChange={(e) => setNewRule({ ...newRule, reason: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" onClick={() => setShowAddRuleModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save to AI Memory
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,25 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { complianceApi, policyApi, codeApi, findingsApi } from '../services/api';
-import { RiskBadge, FindingModal, LoadingSkeleton, EmptyState, ToastContainer, ConfidenceMeter } from '../components/shared';
+import {
+  RiskBadge, FindingModal, FindingCard, LoadingSkeleton,
+  EmptyState, ToastContainer, ConfidenceMeter, ComplianceRiskGauge,
+  EvidencePairCard, SuggestedFixCard
+} from '../components/shared';
 import { useToast } from '../hooks/useAsync';
 import { getRiskColor, formatDate, truncate } from '../utils/helpers';
 import {
   GitBranch, Shield, AlertTriangle, CheckCircle, Search,
-  RefreshCw, Filter, Sparkles, ArrowRight, Layers, Cpu
+  RefreshCw, Filter, Sparkles, ArrowRight, Layers, Cpu,
+  Clock, Activity, Zap, Play, UserCheck, ShieldAlert
 } from 'lucide-react';
 
 const RISK_OPTIONS = ['', 'HIGH', 'MEDIUM', 'LOW', 'COMPLIANT'];
-const STATUS_OPTIONS = ['', 'open', 'acknowledged', 'resolved', 'false_positive'];
+const STATUS_OPTIONS = ['', 'open', 'approved', 'rejected', 'dismissed', 'resolved'];
 
 export default function DriftDetection() {
-  const [tab, setTab] = useState('compare');
+  const [tab, setTab] = useState('compare'); // 'compare' | 'history' | 'findings'
   const [policies, setPolicies] = useState([]);
   const [analyses, setAnalyses] = useState([]);
   const [policyId, setPolicyId] = useState('');
   const [codeId, setCodeId] = useState('');
   const [comparing, setComparing] = useState(false);
   const [compareResult, setCompareResult] = useState(null);
+
+  // History tab
+  const [historyRuns, setHistoryRuns] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [continuousSweeping, setContinuousSweeping] = useState(false);
 
   // Findings tab
   const [findings, setFindings] = useState([]);
@@ -59,9 +69,22 @@ export default function DriftDetection() {
     }
   }, [riskFilter, statusFilter, searchQuery, showToast]);
 
+  const loadHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const res = await complianceApi.getHistory(30);
+      setHistoryRuns(res.data);
+    } catch (e) {
+      showToast('Failed to load history: ' + (e.userMessage || e.message), 'error');
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [showToast]);
+
   useEffect(() => {
     if (tab === 'findings') loadFindings();
-  }, [tab, loadFindings]);
+    if (tab === 'history') loadHistory();
+  }, [tab, loadFindings, loadHistory]);
 
   const handleCompare = useCallback(async () => {
     if (!policyId || !codeId) {
@@ -78,9 +101,9 @@ export default function DriftDetection() {
       setCompareResult(res.data);
       const hasViolation = res.data.findings.some((f) => f.drift_detected && f.risk === 'HIGH');
       if (hasViolation) {
-        showToast('CRITICAL POLICY DRIFT DETECTED! Code behavior breaches policy promises.', 'error');
+        showToast(`CRITICAL DRIFT: Compliance Risk Score ${res.data.compliance_risk_score}/100!`, 'error');
       } else {
-        showToast(`Cross-agent analysis complete: ${res.data.total_findings} finding(s) reviewed.`, 'success');
+        showToast(`Cross-agent analysis complete: ${res.data.total_findings} finding(s) evaluated.`, 'success');
       }
     } catch (e) {
       showToast(e.userMessage || 'Comparison failed', 'error');
@@ -89,17 +112,19 @@ export default function DriftDetection() {
     }
   }, [policyId, codeId, showToast]);
 
-  const handleUpdateStatus = async (findingId, newStatus) => {
+  const handleContinuousSweep = async () => {
+    setContinuousSweeping(true);
     try {
-      await findingsApi.updateStatus(findingId, newStatus);
-      showToast(`Finding status updated to ${newStatus}`, 'success');
-      loadFindings();
+      const res = await complianceApi.continuousCheck();
+      showToast(res.data.message || 'Continuous monitoring sweep complete!', 'success');
+      if (tab === 'history') loadHistory();
+      if (tab === 'findings') loadFindings();
     } catch (e) {
-      showToast('Failed to update finding status.', 'error');
+      showToast('Continuous sweep failed: ' + (e.userMessage || e.message), 'error');
+    } finally {
+      setContinuousSweeping(false);
     }
   };
-
-  const highestRiskColor = compareResult ? getRiskColor(compareResult.highest_risk) : null;
 
   return (
     <div className="page-container">
@@ -120,357 +145,226 @@ export default function DriftDetection() {
             }}>
               <GitBranch size={22} color="white" />
             </span>
-            <span className="gradient-text">Multi-Agent Drift Detection</span>
+            <span className="gradient-text">Multi-Agent Drift & Continuous Sentinel</span>
           </h1>
           <p>
-            Cross-verifies legal obligations extracted by the Legal Agent against static code AST behavior.
-            Flags deviations, missing consent checks, and unauthorized external data transfers.
+            Continuous cross-verification between legal policy covenants and static code AST sinks.
+            Gives numerical Compliance Risk Scores, verbatim evidence pairs, remediation diffs, and governance review actions.
           </p>
         </div>
+
+        <button
+          className="btn btn-primary"
+          onClick={handleContinuousSweep}
+          disabled={continuousSweeping}
+          style={{ padding: '0.55rem 1.15rem' }}
+        >
+          {continuousSweeping ? <RefreshCw size={15} className="animate-spin" /> : <Zap size={15} />}
+          {continuousSweeping ? 'Sweeping All Services...' : 'Trigger Continuous Sweep Now'}
+        </button>
       </div>
 
+      {/* Navigation Tabs */}
       <div className="tab-bar">
         <button className={`tab ${tab === 'compare' ? 'active' : ''}`} onClick={() => setTab('compare')}>
-          ⚡ Compare Policy vs Code
+          ⚡ Multi-Agent Comparison
+        </button>
+        <button className={`tab ${tab === 'history' ? 'active' : ''}`} onClick={() => { setTab('history'); loadHistory(); }}>
+          🔄 Continuous Runs & History Trend ({historyRuns.length || '...'})
         </button>
         <button className={`tab ${tab === 'findings' ? 'active' : ''}`} onClick={() => { setTab('findings'); loadFindings(); }}>
-          🔍 All Compliance Findings ({findings.length || '...'})
+          🔍 All Compliance Findings & Governance ({findings.length || '...'})
         </button>
       </div>
 
-      {/* ===== COMPARE TAB ===== */}
+      {/* Tab 1: Compare */}
       {tab === 'compare' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 1.15fr', gap: '1.75rem', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr', gap: '1.75rem', alignItems: 'start' }}>
+          {/* Controls */}
+          <div className="card">
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0 0 1.25rem', fontFamily: 'Outfit, sans-serif' }}>
+              Select Artifacts for Cross-Agent Verification
+            </h3>
 
-          {/* Selection Panel */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div className="card">
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0 0 1.25rem 0', fontFamily: 'Outfit, sans-serif' }}>
-                Select Targets for Cross-Agent Verification
-              </h3>
-
-              {/* Policy selector */}
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
-                  📋 Policy Baseline
-                </label>
-                <select
-                  className="select"
-                  style={{ width: '100%' }}
-                  value={policyId}
-                  onChange={(e) => setPolicyId(e.target.value)}
-                  id="policy-select"
-                >
-                  <option value="">— Select analyzed policy —</option>
-                  {policies.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      [{p.id}] {p.name} v{p.version} ({p.rules?.length || 0} rules)
-                    </option>
-                  ))}
-                </select>
-                {!policies.length && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                    No policies parsed yet. <Link to="/policy" style={{ color: 'var(--accent-indigo)' }}>Analyze policy first →</Link>
-                  </div>
-                )}
-              </div>
-
-              {/* Code analysis selector */}
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
-                  💻 Code Analysis Target
-                </label>
-                <select
-                  className="select"
-                  style={{ width: '100%' }}
-                  value={codeId}
-                  onChange={(e) => setCodeId(e.target.value)}
-                  id="code-select"
-                >
-                  <option value="">— Select code analysis —</option>
-                  {analyses.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      [{a.id}] {a.file_path} ({a.language})
-                    </option>
-                  ))}
-                </select>
-                {!analyses.length && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                    No code scanned yet. <Link to="/code" style={{ color: 'var(--accent-cyan-bright)' }}>Scan code AST first →</Link>
-                  </div>
-                )}
-              </div>
-
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%', justifyContent: 'center', padding: '0.85rem' }}
-                onClick={handleCompare}
-                disabled={comparing || !policyId || !codeId}
-                id="compare-btn"
-              >
-                {comparing ? (
-                  <><div className="spinner" /> Synthesizing Multi-Agent Drift Analysis...</>
-                ) : (
-                  <><GitBranch size={16} /> Execute Compliance Drift Scan</>
-                )}
-              </button>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                📜 Policy Document (Obligations & Covenants)
+              </label>
+              <select className="select" value={policyId} onChange={(e) => setPolicyId(e.target.value)} style={{ width: '100%' }}>
+                {policies.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>
+                ))}
+              </select>
             </div>
 
-            {/* Agent Pipeline Architecture Banner */}
-            <div className="card" style={{
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%)',
-              border: '1px solid var(--border)'
-            }}>
-              <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: '0.75rem', fontFamily: 'Outfit, sans-serif', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Cpu size={16} color="var(--accent-indigo)" />
-                Multi-Agent Synthesis Flow
-              </div>
-              {[
-                { agent: 'Legal Agent', role: 'Extracts prohibitive rules & user consent conditions', color: 'var(--accent-purple)' },
-                { agent: 'Code Agent', role: 'Identifies PII flow, telemetry calls & external sinks', color: 'var(--accent-cyan-bright)' },
-                { agent: 'Compliance Agent', role: 'Cross-examines commitments against actual AST lines', color: 'var(--risk-high-light)' },
-                { agent: 'Evidence Agent', role: 'Generates structured audit logs and code diffs', color: 'var(--risk-compliant)' },
-              ].map(({ agent, role, color }) => (
-                <div key={agent} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', marginBottom: '0.5rem' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, marginTop: 6, flexShrink: 0, boxShadow: `0 0 8px ${color}` }} />
-                  <div>
-                    <span style={{ fontSize: '0.825rem', fontWeight: 700, color }}>{agent}</span>
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 6 }}>— {role}</span>
-                  </div>
-                </div>
-              ))}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                💻 Source Code Analysis (AST Behavior & Sinks)
+              </label>
+              <select className="select" value={codeId} onChange={(e) => setCodeId(e.target.value)} style={{ width: '100%' }}>
+                {analyses.map((a) => (
+                  <option key={a.id} value={a.id}>{a.file_path} ({a.language})</option>
+                ))}
+              </select>
             </div>
+
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '0.85rem', justifyContent: 'center' }}
+              onClick={handleCompare}
+              disabled={comparing}
+            >
+              {comparing ? (
+                <><RefreshCw size={16} className="animate-spin" /> Cross-Referencing Agents & AST...</>
+              ) : (
+                <><Play size={16} /> Run Multi-Agent Drift Scan</>
+              )}
+            </button>
           </div>
 
-          {/* Result Panel */}
+          {/* Results */}
           <div>
-            {!compareResult && !comparing && (
-              <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-                <GitBranch size={52} color="var(--accent-purple)" style={{ opacity: 0.4, margin: '0 auto 1.25rem' }} />
-                <h3 style={{ fontWeight: 800, margin: '0 0 0.5rem', fontFamily: 'Outfit, sans-serif', fontSize: '1.2rem' }}>
-                  Awaiting Comparison Targets
-                </h3>
-                <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem', maxWidth: 360, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
-                  Select an extracted policy and code analysis from the left panel to execute multi-agent drift cross-examination.
-                </p>
-              </div>
-            )}
-
-            {comparing && (
-              <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-                <div className="spinner" style={{ width: 44, height: 44, borderWidth: 3, margin: '0 auto 1.5rem', borderTopColor: 'var(--accent-indigo)' }} />
-                <h3 style={{ fontWeight: 800, margin: '0 0 0.5rem', fontFamily: 'Outfit, sans-serif' }}>
-                  Synthesizing Multi-Agent Analysis...
-                </h3>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-                  Legal Agent → Code AST Sinks → Compliance Agent → Evidence Logger
-                </p>
-              </div>
-            )}
-
             {compareResult && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {/* Risk Summary Banner */}
-                <div style={{
-                  padding: '1.25rem 1.5rem',
-                  background: compareResult.highest_risk === 'HIGH'
-                    ? 'rgba(239, 68, 68, 0.12)'
-                    : compareResult.highest_risk === 'MEDIUM'
-                    ? 'rgba(245, 158, 11, 0.12)'
-                    : 'rgba(16, 185, 129, 0.12)',
-                  border: `1px solid ${
-                    compareResult.highest_risk === 'HIGH'
-                      ? 'rgba(239, 68, 68, 0.4)'
-                      : compareResult.highest_risk === 'MEDIUM'
-                      ? 'rgba(245, 158, 11, 0.4)'
-                      : 'rgba(16, 185, 129, 0.4)'
-                  }`,
-                  borderRadius: 14,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ fontSize: '2.5rem' }}>
-                      {compareResult.highest_risk === 'HIGH' ? '🚨' :
-                       compareResult.highest_risk === 'MEDIUM' ? '⚠️' :
-                       compareResult.highest_risk === 'COMPLIANT' ? '✅' : '🔵'}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {/* Result Score Banner */}
+                <div className="card" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                  <ComplianceRiskGauge score={compareResult.compliance_risk_score} risk={compareResult.highest_risk} />
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Audit Status
                     </div>
-                    <div>
-                      <div style={{
-                        fontWeight: 900,
-                        fontSize: '1.25rem',
-                        fontFamily: 'Outfit, sans-serif',
-                        color: compareResult.highest_risk === 'HIGH' ? 'var(--risk-high-light)' :
-                               compareResult.highest_risk === 'MEDIUM' ? 'var(--risk-medium-light)' : 'var(--risk-compliant)'
-                      }}>
-                        {compareResult.highest_risk === 'HIGH' ? 'CRITICAL POLICY-CODE DRIFT' :
-                         compareResult.highest_risk === 'MEDIUM' ? 'MANUAL COMPLIANCE REVIEW' :
-                         compareResult.highest_risk === 'COMPLIANT' ? 'FULLY COMPLIANT IMPLEMENTATION' : 'LOW RISK OBSERVED'}
-                      </div>
-                      <div style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                        {compareResult.total_findings} distinct finding(s) cross-verified against commitments
-                      </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: compareResult.highest_risk === 'HIGH' ? 'var(--risk-high)' : 'var(--risk-compliant)' }}>
+                      {compareResult.highest_risk === 'HIGH' ? 'CRITICAL POLICY DRIFT' : 'COMPLIANCE BASELINE VERIFIED'}
                     </div>
                   </div>
-                  <RiskBadge risk={compareResult.highest_risk} size="large" />
                 </div>
 
-                {/* Individual Findings */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    Comparison Findings ({compareResult.findings.length})
-                  </span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Click finding to inspect code snippet & evidence
-                  </span>
-                </div>
-
-                {compareResult.findings.map((f, i) => (
-                  <div
-                    key={i}
-                    className="card"
-                    style={{
-                      padding: '1.125rem 1.35rem',
-                      cursor: 'pointer',
-                      borderLeft: `4px solid ${getRiskColor(f.risk)}`,
-                      transition: 'all 0.2s ease'
-                    }}
-                    onClick={() => setSelectedFinding({ ...f, id: compareResult.saved_finding_ids[i] })}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.45rem' }}>
-                          <RiskBadge risk={f.risk} />
-                          <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                            {f.title}
-                          </span>
+                {/* Findings itemized */}
+                {compareResult.findings.map((finding, idx) => (
+                  <div key={idx} className="card" style={{ padding: '1.5rem', borderLeft: `4px solid ${getRiskColor(finding.risk)}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                          <RiskBadge risk={finding.risk} score={finding.risk_score} />
+                          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>{finding.title}</h3>
                         </div>
-                        <p style={{ margin: '0 0 0.65rem', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-                          {truncate(f.reason, 200)}
+                        <p style={{ margin: 0, fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                          {finding.reason}
                         </p>
-                        <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                          {f.data_involved && <span className="tag">📊 {f.data_involved}</span>}
-                          {f.destination && <span className="tag">🌐 {f.destination}</span>}
-                          {f.code_reference && <span className="tag">💻 {f.code_reference}</span>}
-                        </div>
                       </div>
-                      <div style={{ minWidth: 120 }}>
-                        <ConfidenceMeter value={f.confidence} />
-                      </div>
+                    </div>
+
+                    {/* Exact Evidence Pair */}
+                    <EvidencePairCard finding={finding} />
+
+                    {/* Suggested Fix Diff */}
+                    {finding.suggested_fix && <SuggestedFixCard finding={finding} />}
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => setSelectedFinding(finding)}
+                        style={{ fontSize: '0.8rem', gap: 5 }}
+                      >
+                        <UserCheck size={14} /> Open Human Review & Governance Actions
+                      </button>
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {!compareResult && !comparing && (
+              <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+                <GitBranch size={48} color="var(--text-muted)" style={{ opacity: 0.5, margin: '0 auto 1.25rem' }} />
+                <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.15rem', fontWeight: 800 }}>
+                  Ready to Run Multi-Agent Drift Scan
+                </h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', margin: 0 }}>
+                  Select policy and code artifacts on the left to verify legal covenants against actual data flows.
+                </p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ===== ALL FINDINGS TAB ===== */}
-      {tab === 'findings' && (
-        <div>
-          {/* Filters Bar */}
-          <div className="card" style={{ marginBottom: '1.5rem', padding: '1.25rem' }}>
-            <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
-                <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input
-                  className="input"
-                  style={{ paddingLeft: '2.4rem' }}
-                  placeholder="Search finding titles, code sinks, data types..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && loadFindings()}
-                />
+      {/* Tab 2: History & Continuous Runs */}
+      {tab === 'history' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
+                  Continuous Drift Runs & Historical Trend
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  Chronological record of automated continuous sweeps, manual checks, and GitHub PR scans over time.
+                </p>
               </div>
-
-              <select className="select" value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}>
-                <option value="">All Risk Levels</option>
-                {RISK_OPTIONS.filter(Boolean).map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-
-              <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option value="">All Statuses</option>
-                {STATUS_OPTIONS.filter(Boolean).map((s) => (
-                  <option key={s} value={s}>{s.toUpperCase()}</option>
-                ))}
-              </select>
-
-              <button className="btn btn-secondary" onClick={loadFindings}>
-                <RefreshCw size={14} className={loadingFindings ? 'animate-spin' : ''} /> Filter
+              <button className="btn btn-secondary" onClick={loadHistory} disabled={loadingHistory} style={{ fontSize: '0.78rem' }}>
+                <RefreshCw size={13} className={loadingHistory ? 'animate-spin' : ''} /> Refresh History
               </button>
             </div>
-          </div>
 
-          {/* Findings Table */}
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            {loadingFindings ? (
-              <div style={{ padding: '2rem' }}><LoadingSkeleton count={3} height={75} /></div>
-            ) : !findings.length ? (
+            {loadingHistory ? (
+              <LoadingSkeleton count={4} />
+            ) : historyRuns.length === 0 ? (
               <EmptyState
-                icon="🎉"
-                title="No findings match your filter"
-                description="Run a compliance comparison or clear search filters to view findings."
-                action={
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => { setRiskFilter(''); setStatusFilter(''); setSearchQuery(''); }}
-                  >
-                    Reset All Filters
-                  </button>
-                }
+                icon="🔄"
+                title="No Historical Runs Logged Yet"
+                description="Trigger a continuous sweep or run a comparison to begin tracking compliance trends over time."
               />
             ) : (
               <div style={{ overflowX: 'auto' }}>
-                <table className="data-table">
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
-                    <tr>
-                      <th>Risk</th>
-                      <th>Finding Description</th>
-                      <th>Code Reference</th>
-                      <th>Data / Target</th>
-                      <th>Confidence</th>
-                      <th>Status Action</th>
-                      <th>Detected</th>
+                    <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
+                      <th style={{ padding: '0.75rem' }}>Run ID</th>
+                      <th style={{ padding: '0.75rem' }}>Trigger Type</th>
+                      <th style={{ padding: '0.75rem' }}>Target Artifacts</th>
+                      <th style={{ padding: '0.75rem' }}>Risk Score</th>
+                      <th style={{ padding: '0.75rem' }}>Violations</th>
+                      <th style={{ padding: '0.75rem' }}>Status</th>
+                      <th style={{ padding: '0.75rem' }}>Timestamp</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {findings.map((f) => (
-                      <tr key={f.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedFinding(f)}>
-                        <td><RiskBadge risk={f.risk} /></td>
-                        <td style={{ maxWidth: 280 }}>
-                          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                            {truncate(f.title, 50)}
-                          </div>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                            {truncate(f.reason, 75)}
-                          </div>
+                    {historyRuns.map((run) => (
+                      <tr key={run.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '0.75rem', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>
+                          #{run.id}
                         </td>
-                        <td><span className="tag">💻 {f.code_reference || 'N/A'}</span></td>
-                        <td style={{ fontSize: '0.825rem' }}>
-                          <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{f.data_involved || '—'}</div>
-                          <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{f.destination || ''}</div>
+                        <td style={{ padding: '0.75rem' }}>
+                          <span className="tag" style={{ textTransform: 'uppercase', fontSize: '0.7rem' }}>
+                            {run.trigger_type}
+                          </span>
                         </td>
-                        <td style={{ minWidth: 110 }}><ConfidenceMeter value={f.confidence} /></td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <select
-                            className="select"
-                            style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', borderRadius: 6 }}
-                            value={f.status}
-                            onChange={(e) => handleUpdateStatus(f.id, e.target.value)}
-                          >
-                            <option value="open">Open</option>
-                            <option value="acknowledged">Acknowledged</option>
-                            <option value="resolved">Resolved</option>
-                            <option value="false_positive">False Positive</option>
-                          </select>
+                        <td style={{ padding: '0.75rem' }}>
+                          <div style={{ fontWeight: 700 }}>{run.policy_name || 'System Baseline'}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{run.file_path || 'All Monitored Services'}</div>
                         </td>
-                        <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', fontFamily: 'JetBrains Mono, monospace' }}>
-                          {formatDate(f.created_at)}
+                        <td style={{ padding: '0.75rem' }}>
+                          <ComplianceRiskGauge score={run.compliance_risk_score} risk={run.highest_risk} size="mini" />
+                        </td>
+                        <td style={{ padding: '0.75rem', fontWeight: 700, color: run.violations_count > 0 ? 'var(--risk-high)' : 'var(--risk-compliant)' }}>
+                          {run.violations_count} violation(s)
+                        </td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <span style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            textTransform: 'uppercase',
+                            background: run.status === 'flagged' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                            color: run.status === 'flagged' ? 'var(--risk-high)' : 'var(--risk-compliant)'
+                          }}>
+                            {run.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
+                          {formatDate(run.created_at)}
                         </td>
                       </tr>
                     ))}
@@ -482,8 +376,90 @@ export default function DriftDetection() {
         </div>
       )}
 
+      {/* Tab 3: All Findings */}
+      {tab === 'findings' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Filters Bar */}
+          <div className="card" style={{ padding: '1rem 1.25rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
+                <Search size={15} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Search findings by code, reason, or title..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ paddingLeft: 34 }}
+                />
+              </div>
+
+              <select
+                className="select"
+                value={riskFilter}
+                onChange={(e) => setRiskFilter(e.target.value)}
+                style={{ width: 160 }}
+              >
+                <option value="">All Severity Levels</option>
+                <option value="HIGH">Critical / High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+                <option value="COMPLIANT">Compliant</option>
+              </select>
+
+              <select
+                className="select"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                style={{ width: 160 }}
+              >
+                <option value="">All Review Statuses</option>
+                <option value="open">Open (Unreviewed)</option>
+                <option value="approved">Approved Violation</option>
+                <option value="rejected">Rejected (False Positive)</option>
+                <option value="dismissed">Dismissed (Waived)</option>
+                <option value="resolved">Resolved & Fixed</option>
+              </select>
+
+              <button className="btn btn-secondary" onClick={loadFindings}>
+                <Filter size={14} /> Filter
+              </button>
+            </div>
+          </div>
+
+          {/* List */}
+          {loadingFindings ? (
+            <LoadingSkeleton count={4} />
+          ) : findings.length === 0 ? (
+            <EmptyState
+              icon="🛡️"
+              title="No Compliance Drift Findings Found"
+              description="No findings matching your filter criteria. Run new scans to evaluate codebases."
+            />
+          ) : (
+            <div>
+              {findings.map((f) => (
+                <FindingCard
+                  key={f.id}
+                  finding={f}
+                  onClick={(finding) => setSelectedFinding(finding)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Detail Modal with Human Review & Timeline */}
       {selectedFinding && (
-        <FindingModal finding={selectedFinding} onClose={() => setSelectedFinding(null)} />
+        <FindingModal
+          finding={selectedFinding}
+          onClose={() => setSelectedFinding(null)}
+          onReviewComplete={() => {
+            loadFindings();
+            if (tab === 'history') loadHistory();
+          }}
+        />
       )}
     </div>
   );

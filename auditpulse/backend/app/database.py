@@ -4,6 +4,7 @@ pgvector-ready architecture
 """
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 from app.config import settings
 
 is_sqlite = "sqlite" in settings.database_url
@@ -52,6 +53,29 @@ async def get_db() -> AsyncSession:
 
 
 async def create_tables():
-    """Create all tables on startup"""
+    """Create all tables on startup and apply light migrations if needed."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # In SQLite, dynamically ensure newly added columns exist in tables
+        if is_sqlite:
+            # Check findings columns
+            columns_to_add = [
+                ("findings", "risk_score", "REAL DEFAULT 0.0"),
+                ("findings", "suggested_fix", "JSON"),
+                ("findings", "evidence_pair", "JSON"),
+                ("findings", "reviewed_by", "VARCHAR(255)"),
+                ("findings", "reviewer_role", "VARCHAR(100)"),
+                ("findings", "review_decision", "VARCHAR(50)"),
+                ("findings", "review_notes", "TEXT"),
+                ("findings", "reviewed_at", "DATETIME"),
+                ("policies", "parent_policy_id", "INTEGER"),
+                ("policies", "version_notes", "TEXT"),
+                ("vendors", "affected_components", "JSON"),
+            ]
+            for table, col, col_type in columns_to_add:
+                try:
+                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type};"))
+                except Exception:
+                    # Column already exists or table doesn't support ALTER
+                    pass

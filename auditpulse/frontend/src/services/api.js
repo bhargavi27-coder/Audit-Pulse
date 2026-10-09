@@ -42,6 +42,7 @@ export const policyApi = {
   }),
   list: () => api.get('/policies'),
   get: (id) => api.get(`/policies/${id}`),
+  compareVersions: (data) => api.post('/policies/compare-versions', data),
 };
 
 // ===== Code API =====
@@ -57,6 +58,8 @@ export const codeApi = {
 // ===== Compliance API =====
 export const complianceApi = {
   compare: (data) => api.post('/compliance/compare', data),
+  continuousCheck: () => api.post('/compliance/continuous-check'),
+  getHistory: (limit = 25) => api.get('/compliance/history', { params: { limit } }),
 };
 
 // ===== Findings API =====
@@ -64,6 +67,15 @@ export const findingsApi = {
   list: (params) => api.get('/findings', { params }),
   get: (id) => api.get(`/findings/${id}`),
   updateStatus: (id, status) => api.patch(`/findings/${id}`, { status }),
+  review: (id, data) => api.post(`/findings/${id}/review`, data),
+  getTimeline: (id) => api.get(`/findings/${id}/timeline`),
+};
+
+// ===== AI Feedback API =====
+export const feedbackApi = {
+  list: () => api.get('/feedback'),
+  create: (data) => api.post('/feedback', data),
+  delete: (id) => api.delete(`/feedback/${id}`),
 };
 
 // ===== Vendors API =====
@@ -84,6 +96,14 @@ export const dashboardApi = {
 // ===== GitHub API =====
 export const githubApi = {
   analyze: (data) => api.post('/github/analyze', data),
+  simulatePr: () => api.post('/github/simulate-pr'),
+  listChecks: () => api.get('/github/checks'),
+};
+
+// ===== Reports API =====
+export const reportsApi = {
+  getAuditReport: () => api.get('/reports/audit-report'),
+  getExportHtmlUrl: () => '/api/reports/export/html',
 };
 
 export default api;

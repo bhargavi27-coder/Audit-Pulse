@@ -4,12 +4,14 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer,
   Tooltip, XAxis, YAxis, CartesianGrid, ScatterChart, Scatter, ZAxis
 } from 'recharts';
-import { dashboardApi } from '../services/api';
-import { RiskBadge, FindingModal, LoadingSkeleton, EmptyState } from '../components/shared';
+import { dashboardApi, githubApi } from '../services/api';
+import { RiskBadge, FindingModal, LoadingSkeleton, EmptyState, ComplianceRiskGauge, ToastContainer } from '../components/shared';
+import { useToast } from '../hooks/useAsync';
 import { getRiskColor, formatDate, truncate } from '../utils/helpers';
 import {
   Shield, FileText, Code2, Eye, TrendingUp, AlertTriangle,
-  CheckCircle, Activity, RefreshCw, Zap, ArrowRight, Sparkles, Globe
+  CheckCircle, Activity, RefreshCw, Zap, ArrowRight, Sparkles, Globe,
+  GitPullRequest, GitMerge, Check, X, Terminal, Copy, ExternalLink
 } from 'lucide-react';
 
 const RISK_COLORS = {
@@ -25,6 +27,11 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [selectedFinding, setSelectedFinding] = useState(null);
 
+  // GitHub PR Simulator State
+  const [simulatingPr, setSimulatingPr] = useState(false);
+  const [prResult, setPrResult] = useState(null);
+  const { toasts, showToast, removeToast } = useToast();
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -39,6 +46,29 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleSimulatePr = async () => {
+    setSimulatingPr(true);
+    try {
+      const payload = {
+        repo: 'acme/auditpulse-app',
+        pr_number: 142,
+        changed_files: ['src/analytics/tracker.ts', 'src/controllers/userController.js'],
+        commit_sha: 'a8f1b2c'
+      };
+      const res = await githubApi.simulatePr(payload);
+      setPrResult(res.data);
+      if (res.data.status === 'BLOCKED') {
+        showToast(`PR #${res.data.pr_number} Check Failed: Compliance blocker detected!`, 'warning');
+      } else {
+        showToast(`PR #${res.data.pr_number} Check Passed: Clean compliance score!`, 'success');
+      }
+    } catch (err) {
+      showToast('Error simulating PR gatekeeper: ' + (err.userMessage || err.message), 'error');
+    } finally {
+      setSimulatingPr(false);
+    }
+  };
 
   const statCards = summary ? [
     {
@@ -92,6 +122,8 @@ export default function Dashboard() {
 
   return (
     <div className="page-container">
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
       {/* Page Header */}
       <div className="page-header">
         <div>
@@ -107,17 +139,27 @@ export default function Dashboard() {
             }}>
               <Shield size={22} color="white" />
             </span>
-            <span className="gradient-text">Executive Compliance Dashboard</span>
+            <span className="gradient-text">Autonomous Compliance & CI/CD Gatekeeper</span>
           </h1>
           <p>
-            Real-time compliance monitoring, multi-agent drift detection, and Playwright vendor surveillance overview.
+            Real-time multi-agent compliance monitoring, AST data flow tracking, continuous drift detection,
+            and automated GitHub Pull Request gating.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={load} disabled={loading}>
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             Refresh Data
+          </button>
+          <button
+            onClick={handleSimulatePr}
+            className="btn btn-cyan"
+            disabled={simulatingPr}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            <GitPullRequest size={15} className={simulatingPr ? 'animate-spin' : ''} />
+            {simulatingPr ? 'Checking PR...' : 'Simulate GitHub PR'}
           </button>
           <Link to="/drift" className="btn btn-primary">
             <Zap size={15} /> Run New Drift Scan
@@ -129,6 +171,112 @@ export default function Dashboard() {
         <div className="alert alert-high" style={{ marginBottom: '1.5rem' }}>
           <AlertTriangle size={18} color="var(--risk-high)" style={{ flexShrink: 0 }} />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* Top Banner: Health & Risk Gauge Scorecard */}
+      {summary && (
+        <div className="card" style={{
+          padding: '1.5rem 2rem',
+          marginBottom: '2rem',
+          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%)',
+          border: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '1.5rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+            <ComplianceRiskGauge score={summary.compliance_risk_score ?? (summary.health_score ? 100 - summary.health_score : 15)} size={95} />
+            <div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Overall Compliance Risk Index
+              </div>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: '0.2rem 0', fontFamily: 'Outfit, sans-serif' }}>
+                {(summary.compliance_risk_score ?? 15) > 50 ? 'High Risk Exposure' : 'Low Compliance Risk'}
+              </h2>
+              <div style={{ fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
+                Calculated from {summary.active_risks || 0} active policy-code divergences across {summary.code_files_scanned || 0} scanned files.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+                Codebase Health
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--risk-compliant)', fontFamily: 'Outfit, sans-serif' }}>
+                {summary.health_score || 92}%
+              </div>
+            </div>
+
+            <Link to="/reports" className="btn btn-primary" style={{ padding: '0.65rem 1.2rem', fontSize: '0.85rem' }}>
+              View Certified Report →
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* GitHub PR Simulator Card (Requirement 7) */}
+      {prResult && (
+        <div className="card" style={{
+          padding: '1.5rem',
+          marginBottom: '2rem',
+          border: prResult.status === 'BLOCKED' ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(16, 185, 129, 0.4)',
+          background: prResult.status === 'BLOCKED' ? 'rgba(239, 68, 68, 0.04)' : 'rgba(16, 185, 129, 0.04)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: prResult.status === 'BLOCKED' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <GitPullRequest size={22} color={prResult.status === 'BLOCKED' ? 'var(--risk-high-light)' : 'var(--risk-compliant)'} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <strong style={{ fontSize: '1.05rem', fontFamily: 'Outfit, sans-serif' }}>
+                    GitHub CI/CD Gatekeeper Check: PR #{prResult.pr_number} ({prResult.repo})
+                  </strong>
+                  <span className={`badge ${prResult.status === 'BLOCKED' ? 'badge-high' : 'badge-compliant'}`}>
+                    {prResult.status === 'BLOCKED' ? 'MERGE BLOCKED' : 'CHECKS PASSED'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                  Commit: <code style={{ fontFamily: 'JetBrains Mono, monospace' }}>{prResult.commit_sha}</code> • {prResult.changed_files?.length || 0} modified files evaluated
+                </div>
+              </div>
+            </div>
+
+            <button onClick={() => setPrResult(null)} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem' }}>
+              ✕ Dismiss
+            </button>
+          </div>
+
+          {/* GitHub PR Comment Markdown Preview */}
+          <div style={{
+            background: 'var(--surface-color)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            padding: '1.25rem',
+            fontFamily: 'system-ui, -apple-system, sans-serif'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent-cyan-bright)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Terminal size={14} /> Automated GitHub Bot Comment Preview
+              </span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                bot: auditpulse[bot]
+              </span>
+            </div>
+
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.6, fontFamily: 'inherit' }}>
+              {prResult.markdown_comment}
+            </div>
+          </div>
         </div>
       )}
 
@@ -362,7 +510,7 @@ export default function Dashboard() {
               Detected Compliance Deviations
             </h3>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Click on any finding to inspect evidence snippets and AI remediation instructions
+              Click on any finding to inspect exact evidence sentence ⟷ code pairings and suggested fix diffs
             </span>
           </div>
           <Link
@@ -388,6 +536,7 @@ export default function Dashboard() {
               <thead>
                 <tr>
                   <th>Risk Level</th>
+                  <th>Risk Score</th>
                   <th>Finding Title & Root Reason</th>
                   <th>Code Sink</th>
                   <th>Protected Data</th>
@@ -403,7 +552,17 @@ export default function Dashboard() {
                     onClick={() => setSelectedFinding(f)}
                   >
                     <td><RiskBadge risk={f.risk} /></td>
-                    <td style={{ maxWidth: 320 }}>
+                    <td>
+                      <span style={{
+                        fontWeight: 800,
+                        fontFamily: 'JetBrains Mono, monospace',
+                        fontSize: '0.85rem',
+                        color: (f.risk_score || 0) > 70 ? 'var(--risk-high-light)' : (f.risk_score || 0) > 40 ? 'var(--risk-medium-light)' : 'var(--risk-compliant)'
+                      }}>
+                        {f.risk_score || 0}
+                      </span>
+                    </td>
+                    <td style={{ maxWidth: 300 }}>
                       <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
                         {truncate(f.title, 55)}
                       </div>

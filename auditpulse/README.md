@@ -1,21 +1,27 @@
-# 🛡️ AuditPulse — AI-Powered Compliance Drift Detection
+# 🛡️ AuditPulse — Autonomous Multi-Agent Compliance Drift Detection & CI/CD Gatekeeper
 
-> **AuditPulse** detects mismatches between company privacy policies and actual source code behavior using a multi-agent AI pipeline.
+> **AuditPulse** bridges the divide between corporate privacy commitments and actual source code behavior. Using static AST analysis, NLP extraction, and autonomous multi-agent reasoning, AuditPulse continuously detects policy-code drift, maps third-party vendor blast radius, enforces pull request gates, and provides verifiable line-level audit trails.
 
-⚠️ *AuditPulse provides AI-assisted compliance analysis and does not replace professional legal advice.*
+⚠️ *AuditPulse provides AI-assisted compliance analysis and verifiable audit evidence; it is intended to augment legal and security teams.*
 
 ---
 
-## ✨ Features
+## ✨ Enterprise Capability Comparison (12/12 Completed)
 
-| Feature | Description |
-|--------|-------------|
-| 📄 **Policy Parser** | Upload or paste policy text (PDF, TXT, MD) — Legal Agent extracts structured compliance rules |
-| 🔬 **Code Analyzer** | AST + AI analysis of JS/TS/Python/Java/Go source code for data behavior |
-| ⚡ **Drift Detection** | Multi-agent AI cross-references policy rules against code behavior |
-| 🌐 **Vendor Monitor** | Playwright + BeautifulSoup scrapes 3rd-party policy pages for changes |
-| 📊 **Reports** | Export findings as JSON or CSV, filter by risk/status |
-| 🔗 **GitHub Actions** | Auto-checks PRs for compliance violations via `/api/github/analyze` |
+| # | Improvement | Capabilities in AuditPulse |
+|---|---|---|
+| **1** | **Policy Analysis** | Multi-version extraction, NLP semantic clause diffing, and risk-impact comparisons (`POST /api/policies/compare-versions`). |
+| **2** | **Code Analysis** | Static AST analysis identifying affected components & end-to-end data flows (`Source ➔ Transform ➔ Sink`). |
+| **3** | **Drift Detection** | Continuous compliance monitoring sweeps (`POST /api/compliance/continuous-check`) with historical run tracking. |
+| **4** | **Risk Scoring** | Granular Compliance Risk Score (0–100), AI confidence rating, and codebase health indices. |
+| **5** | **Line-Level Evidence** | Verbatim line-level evidence pairing (`policy_quote` ⟷ `code_snippet`) for defensible audit documentation. |
+| **6** | **AI Suggested Fixes** | Unified codebase patch diffs and policy adjustment recommendations with copy-ready diffs. |
+| **7** | **GitHub Integration** | Automated Pull Request Gatekeeper, PR Simulator (`POST /api/github/simulate-pr`), and formatted Markdown bot comments. |
+| **8** | **Vendor Surveillance** | Headless Playwright monitoring of 3rd-party Terms of Service correlated with connected codebase components. |
+| **9** | **Compliance History** | Complete finding lifecycle audit timeline (`DETECTED ➔ REVIEWED ➔ ASSIGNED ➔ RESOLVED`). |
+| **10** | **Human Review** | Multi-role governance workflows (`APPROVE`, `REJECT`, `DISMISS`, `ACKNOWLEDGE`) with audit attribution. |
+| **11** | **AI Feedback Loop** | False-positive memory feedback loop (`/api/feedback`) that trains future scans and suppresses active false alarms. |
+| **12** | **Executive Reporting** | Board-ready audit report with regulatory matrix (GDPR, CCPA, SOC 2, ISO 27001) + Certified HTML/PDF export (`/api/reports/export/html`). |
 
 ---
 
@@ -25,8 +31,15 @@
 - Python 3.11+
 - Node.js 20+
 
-### 1. Backend
+### Option A: 1-Click Startup (Windows)
+Double-click `start-dev.bat` in the root repository folder, or run:
+```cmd
+start-dev.bat
+```
 
+### Option B: Manual Setup
+
+#### 1. Backend (FastAPI + Async SQLAlchemy)
 ```bash
 cd auditpulse/backend
 
@@ -38,22 +51,21 @@ venv\Scripts\activate        # Windows
 # Install dependencies
 pip install -r requirements.txt
 
-# Install Playwright browsers (for vendor monitoring)
+# Install Playwright browser binaries (for vendor monitoring)
 playwright install chromium
 
 # Copy and edit environment config
 cp ../.env.example ../.env
-# Edit .env — set AI_PROVIDER=mock (no key needed) or add your API key
+# Edit .env — AI_PROVIDER=mock (works out of the box with zero setup) or set Groq/OpenAI/Claude key
 
 # Run the backend
 uvicorn app.main:app --reload --port 8000
 ```
 
 Backend is now running at **http://localhost:8000**  
-API docs at **http://localhost:8000/docs**
+Interactive API docs at **http://localhost:8000/docs**
 
-### 2. Frontend
-
+#### 2. Frontend (React + Vite + Design System)
 ```bash
 cd auditpulse/frontend
 
@@ -68,7 +80,7 @@ Frontend is now running at **http://localhost:5173**
 
 ---
 
-## 🐳 Docker (Full Stack)
+## 🐳 Docker Setup (Full Stack)
 
 ```bash
 cd auditpulse
@@ -76,141 +88,72 @@ cd auditpulse
 # Copy env file
 cp .env.example .env
 
-# Start everything (backend + frontend + PostgreSQL)
+# Start full stack (backend + frontend + PostgreSQL)
 docker-compose up --build
 ```
 
 | Service | URL |
 |---------|-----|
-| Frontend | http://localhost:3000 |
+| Frontend Web UI | http://localhost:3000 |
 | Backend API | http://localhost:8000 |
-| API Docs | http://localhost:8000/docs |
+| Swagger Docs | http://localhost:8000/docs |
 
 ---
 
 ## 🤖 AI Provider Configuration
 
-Set `AI_PROVIDER` in your `.env` file:
+AuditPulse supports multiple AI providers with deterministic fallback:
 
-| Provider | Value | Required Key |
-|----------|-------|-------------|
-| No API (demo mode) | `mock` | None |
-| OpenAI GPT-4o | `openai` | `OPENAI_API_KEY` |
-| Anthropic Claude | `anthropic` | `ANTHROPIC_API_KEY` |
-| Google Gemini | `google` | `GOOGLE_API_KEY` |
+| Provider | Value in `.env` | Required Key | Capabilities |
+|----------|-----------------|--------------|--------------|
+| Local Mock (Deterministic) | `mock` | *None* | Instant testing, pre-computed AST & NLP fixtures |
+| Groq (Ultra-Fast Llama-3) | `groq` | `GROQ_API_KEY` | Sub-second multi-agent comparisons |
+| OpenAI (GPT-4o) | `openai` | `OPENAI_API_KEY` | Deep legal reasoning & fix patch generation |
+| Anthropic (Claude 3.5 Sonnet) | `anthropic` | `ANTHROPIC_API_KEY` | Complex code AST semantic trace analysis |
+| Google Gemini (Gemini 1.5 Pro) | `google` | `GOOGLE_API_KEY` | Long-context regulatory cross-examination |
 
 ---
 
-## 🔬 Running Tests
+## 🔬 Running the Test Suite
 
 ```bash
-cd auditpulse
-
-# Run the test suite (uses mock AI provider)
-python -m pytest -o pythonpath=backend tests/test_compliance.py -v
+# Run the complete test suite (10/10 tests)
+python -m pytest -o pythonpath=auditpulse/backend auditpulse/tests -v
 ```
 
-**Tests cover:**
-- No-violation detection (local console.log)
-- HIGH risk violation (email → analytics without consent)
-- Consent check compliance
-- Unrelated data (no PII → COMPLIANT)
-- Vendor policy drift detection
-- Legal Agent rule extraction
-- AST analyzer sensitive data detection
+**Test Coverage:**
+- `test_no_violation_console_log`: Compliant local logging verification
+- `test_violation_analytics_email`: High risk policy divergence detection
+- `test_consent_check_compliant`: Consent gate AST verification
+- `test_unrelated_data_no_email`: Non-PII data transfer evaluation
+- `test_vendor_drift_detection`: Playwright terms of service drift detection
+- `test_legal_agent_extracts_rules`: NLP privacy policy rule extraction
+- `test_ast_analyzer_detects_sensitive_data`: Codebase AST source/sink detection
+- `test_policy_version_comparison`: Multi-version semantic diffing
+- `test_code_analysis_data_flows_and_components`: End-to-end data flow and affected components extraction
+- `test_ai_feedback_loop_suppression`: False-positive suppression memory loop
 
 ---
 
-## 🔗 GitHub Actions Integration
+## 📡 API Endpoints Reference
 
-Add these secrets to your repo (`Settings → Secrets → Actions`):
-
-| Secret | Description |
-|--------|-------------|
-| `AUDITPULSE_API_URL` | Your deployed AuditPulse URL (e.g. `https://your-app.com`) |
-| `AUDITPULSE_API_KEY` | Optional API key for auth |
-
-The workflow in `.github/workflows/auditpulse.yml` will:
-1. Detect changed `.js/.ts/.py` files on every PR
-2. POST them to your AuditPulse instance for compliance analysis
-3. Comment results directly on the PR
-
----
-
-## 🗂️ Project Structure
-
-```
-auditpulse/
-├── backend/                    # FastAPI backend
-│   ├── app/
-│   │   ├── agents/             # Multi-agent AI pipeline
-│   │   │   ├── legal_agent.py      # Policy rule extraction
-│   │   │   ├── code_agent.py       # Code behavior analysis
-│   │   │   ├── compliance_agent.py # Policy ↔ code comparison
-│   │   │   └── evidence_agent.py   # Evidence documentation
-│   │   ├── analyzers/          # AST code analysis
-│   │   ├── models/             # SQLAlchemy ORM models
-│   │   ├── routes/             # FastAPI route handlers
-│   │   ├── schemas/            # Pydantic request/response schemas
-│   │   ├── services/           # LLM service + vendor monitor
-│   │   ├── config.py           # Settings from .env
-│   │   ├── database.py         # Async SQLAlchemy setup
-│   │   └── main.py             # FastAPI app entry point
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/                   # React + Vite frontend
-│   ├── src/
-│   │   ├── components/         # Shared UI components
-│   │   ├── hooks/              # useAsync, useToast
-│   │   ├── pages/              # Dashboard, Policy, Code, Drift, Vendors, Reports, Settings
-│   │   ├── services/api.js     # Axios API client
-│   │   └── utils/helpers.js    # Formatting utilities
-│   ├── nginx.conf              # Production nginx config
-│   └── Dockerfile
-├── tests/                      # Pytest test suite
-├── demo/                       # Sample policy/code files
-├── .github/workflows/          # GitHub Actions CI
-├── .env.example                # Environment variable template
-└── docker-compose.yml          # Full stack Docker setup
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | API & LLM service health diagnostics |
+| `POST` | `/api/policies/analyze` | Parse policy text into structured rules |
+| `POST` | `/api/policies/compare-versions` | Compare two versions of a policy with impact analysis |
+| `POST` | `/api/code/analyze` | Run AST parsing for data flows & affected components |
+| `POST` | `/api/compliance/compare` | Multi-agent policy vs code drift cross-examination |
+| `POST` | `/api/compliance/continuous-check` | Execute continuous compliance monitoring sweep |
+| `GET` | `/api/compliance/history` | Retrieve historical drift scan runs and trends |
+| `POST` | `/api/findings/{id}/review` | Governance review action (`APPROVE`/`REJECT`/`DISMISS`) |
+| `GET` | `/api/findings/{id}/timeline` | Retrieve finding lifecycle audit stepper |
+| `GET` | `/api/feedback` | Retrieve active AI false-positive suppression rules |
+| `POST` | `/api/feedback` | Submit new false-positive AI learning rule |
+| `POST` | `/api/github/simulate-pr` | Simulate GitHub PR gating & generate bot Markdown comments |
+| `GET` | `/api/reports/audit-report` | Generate CISO executive audit report with regulatory matrix |
+| `GET` | `/api/reports/export/html` | Export certified standalone HTML audit report |
 
 ---
 
-## 📡 API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check |
-| `POST` | `/api/policies/analyze` | Analyze policy text |
-| `POST` | `/api/policies/upload` | Upload policy file |
-| `GET` | `/api/policies` | List all policies |
-| `POST` | `/api/code/analyze` | Analyze source code |
-| `POST` | `/api/code/upload` | Upload code file |
-| `POST` | `/api/compliance/compare` | Run drift detection |
-| `GET` | `/api/findings` | List findings (filterable) |
-| `PATCH` | `/api/findings/{id}` | Update finding status |
-| `POST` | `/api/vendors` | Add vendor to monitor |
-| `POST` | `/api/vendors/{id}/check` | Check vendor for drift |
-| `GET` | `/api/dashboard/summary` | Dashboard stats |
-| `POST` | `/api/github/analyze` | GitHub PR analysis |
-
-Full interactive docs at **/docs** (Swagger UI)
-
----
-
-## 📋 Demo Files
-
-Sample files are in `demo/` for testing the system end-to-end:
-
-| File | Description |
-|------|-------------|
-| `privacy_policy.txt` | Sample privacy policy with GDPR rules |
-| `violating_code.js` | Code that violates the policy (email → analytics) |
-| `compliant_code.js` | Code that is compliant (consent checked) |
-| `consent_code.js` | Code with proper consent gates |
-| `vendor_policy_old.txt` | Vendor policy v1 (30-day retention) |
-| `vendor_policy_new.txt` | Vendor policy v2 (180-day retention — drift!) |
-
----
-
-*Built with FastAPI · React · SQLAlchemy · Playwright · Multi-agent AI*
+*Built with FastAPI · React · Tree-sitter AST · Playwright · Multi-agent AI*

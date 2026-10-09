@@ -1,6 +1,6 @@
 """
 Code Agent — Extracts structured behavior from source code
-Uses AST analysis + LLM interpretation
+Uses AST analysis + LLM interpretation to identify affected components and data flows
 """
 import json
 import re
@@ -8,9 +8,9 @@ from typing import Dict, Any, List, Optional
 from app.services.llm_service import llm_service
 from app.analyzers.ast_analyzer import ast_analyzer
 
-SYSTEM_PROMPT = """You are a Code Analysis Agent specializing in security and privacy compliance.
+SYSTEM_PROMPT = """You are a Code Analysis Agent specializing in security, data flow mapping, and privacy compliance.
 
-Your task is to analyze source code and extract structured behavioral information relevant to compliance.
+Your task is to analyze source code and extract structured behavioral information, identifying affected components and end-to-end data flows.
 
 For each behavioral pattern found, identify:
 - What sensitive data is accessed (user.email, user.name, user_id, phone, etc.)
@@ -18,6 +18,8 @@ For each behavioral pattern found, identify:
 - What network requests are made
 - What data is logged or stored
 - Whether any consent or privacy checks exist before sensitive operations
+- Which application components/modules/functions are affected
+- The end-to-end data flow (Source -> Transform -> Sink)
 
 Return a JSON object with:
 {
@@ -29,6 +31,19 @@ Return a JSON object with:
   "network_requests": ["list of network operations"],
   "logging_events": ["list of logging operations"],
   "storage_operations": ["list of storage operations"],
+  "affected_components": ["list of affected components/functions e.g. trackUser, analyticsModule"],
+  "data_flows": [
+    {
+      "id": "DF-01",
+      "source": "user.email",
+      "transform": "direct mapping",
+      "sink": "analytics.track",
+      "data_sensitivity": "PII / High",
+      "consent_guarded": false,
+      "component": "trackUser",
+      "line": 18
+    }
+  ],
   "findings": [
     {
       "line": <line_number>,
@@ -52,12 +67,12 @@ class CodeAgent:
     """
     Agent 2: Analyzes source code and returns structured behavior description.
     Uses AST when available, falls back to LLM text analysis.
+    Identifies affected components and data flows.
     """
 
     async def analyze(self, code: str, language: str, file_path: str = "") -> Dict[str, Any]:
         """
-        Analyze source code for compliance-relevant behaviors.
-        Returns structured behavior dict.
+        Analyze source code for compliance-relevant behaviors, affected components, and data flows.
         """
         # Step 1: AST analysis (when available)
         ast_data = {}
@@ -81,12 +96,21 @@ File: {file_path}
 {code[:6000]}
 ==================
 
-Extract all sensitive data usage, external service calls, consent checks, and data flows."""
+Extract all sensitive data usage, external service calls, consent checks, affected components, and data flows."""
 
         raw_response = await llm_service.complete(SYSTEM_PROMPT, user_prompt)
         result = self._parse_response(raw_response)
         result["ast_used"] = ast_used
         result["ast_data"] = ast_data
+
+        # Merge AST affected components and data flows if LLM missed them
+        if not result.get("affected_components") and ast_data.get("affected_components"):
+            result["affected_components"] = ast_data["affected_components"]
+        if not result.get("data_flows") and ast_data.get("data_flows"):
+            result["data_flows"] = ast_data["data_flows"]
+
+        if not result.get("affected_components"):
+            result["affected_components"] = [f"File: {file_path}"]
 
         return result
 
@@ -120,6 +144,8 @@ Extract all sensitive data usage, external service calls, consent checks, and da
             "network_requests": [],
             "logging_events": [],
             "storage_operations": [],
+            "affected_components": [],
+            "data_flows": [],
             "findings": [],
             "summary": f"Parse error. Raw: {raw[:200]}"
         }

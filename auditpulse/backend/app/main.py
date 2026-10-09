@@ -13,6 +13,7 @@ from app.routes.code import router as code_router
 from app.routes.compliance import router as compliance_router
 from app.routes.vendors import router as vendors_router
 from app.routes.dashboard import dashboard_router, github_router
+from app.routes.reports import router as reports_router
 
 
 @asynccontextmanager
@@ -29,11 +30,19 @@ app = FastAPI(
 
     Detects mismatches between company policies and actual source code behavior.
 
-    ### Core Flow
-    1. **Policy Analysis** → Extract compliance rules from policy documents
-    2. **Code Analysis** → Analyze source code for compliance-relevant behaviors  
-    3. **Compliance Comparison** → Detect policy-code drift using multi-agent AI
-    4. **Evidence Documentation** → Precise, evidence-based findings
+    ### 12 Enhanced Capabilities
+    1. **Policy Analysis**: AI extracts rules and compares policy versions
+    2. **Code Analysis**: Identifies affected components and data flows
+    3. **Drift Detection**: Detects mismatch continuously & tracks history
+    4. **Result**: Compliance Risk Score (0-100) + severity + confidence
+    5. **Explanation**: Exact policy sentence <-> exact code line pairing
+    6. **Fix**: Concrete suggested fix diffs & patches
+    7. **GitHub**: Automated Pull Request gating & comments
+    8. **Vendor Monitoring**: Highlights affected application components
+    9. **History**: Compliance timeline (detected -> reviewed -> fixed)
+    10. **Human Review**: Legal/security approval, rejection, and waiver workflow
+    11. **AI Feedback**: False-positive feedback loop to improve future analysis
+    12. **Reporting**: Professional executive audit reports & print exports
 
     ⚠️ *AuditPulse provides AI-assisted compliance analysis and does not replace professional legal advice.*
     """,
@@ -59,6 +68,7 @@ app.include_router(compliance_router)
 app.include_router(vendors_router)
 app.include_router(dashboard_router)
 app.include_router(github_router)
+app.include_router(reports_router)
 
 
 @app.get("/", tags=["Health"])

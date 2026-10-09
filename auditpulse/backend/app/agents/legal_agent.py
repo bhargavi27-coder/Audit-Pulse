@@ -1,9 +1,9 @@
 """
-Legal Agent — Extracts structured compliance rules from policy text
+Legal Agent — Extracts structured compliance rules and compares policy versions
 """
 import json
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app.services.llm_service import llm_service
 
 SYSTEM_PROMPT = """You are a Legal Compliance Agent specializing in privacy law, data protection, and software compliance.
@@ -25,10 +25,60 @@ Be precise. Do not invent rules not present in the policy. If insufficient infor
 Identify obligations (must), prohibitions (must not), and permissions (may).
 """
 
+VERSION_DIFF_SYSTEM_PROMPT = """You are a Senior Legal & Regulatory Policy Analyst.
+Your task is to compare two versions of a company privacy/legal policy (Version A vs Version B).
+
+Carefully identify:
+1. ADDED RULES: New obligations, prohibitions, or permissions in Version B not in Version A.
+2. REMOVED RULES: Protections, restrictions, or commitments present in Version A that were deleted in Version B.
+3. MODIFIED RULES: Scope expansions, retention extensions, loosened consent terms, or altered definitions between Version A and Version B.
+4. RISK IMPACT: Rate the overall compliance risk shift as "INCREASED_RISK" (e.g., customer protections removed or retention prolonged), "REDUCED_RISK", or "NEUTRAL".
+5. SUMMARY: Executive summary explaining the legal and compliance implications of these policy changes.
+
+Return a JSON object with:
+{
+  "risk_impact": "INCREASED_RISK" | "REDUCED_RISK" | "NEUTRAL",
+  "summary": "...",
+  "added_rules": [
+    {
+      "section": "...",
+      "data_type": "...",
+      "action": "...",
+      "destination": "...",
+      "condition": "...",
+      "severity": "HIGH|MEDIUM|LOW",
+      "raw_text": "..."
+    }
+  ],
+  "removed_rules": [
+    {
+      "section": "...",
+      "data_type": "...",
+      "action": "...",
+      "destination": "...",
+      "condition": "...",
+      "severity": "HIGH|MEDIUM|LOW",
+      "raw_text": "..."
+    }
+  ],
+  "modified_rules": [
+    {
+      "section": "...",
+      "data_type": "...",
+      "change_description": "...",
+      "old_text": "...",
+      "new_text": "...",
+      "severity": "HIGH|MEDIUM|LOW"
+    }
+  ],
+  "detailed_diff": "..."
+}
+"""
+
 
 class LegalAgent:
     """
-    Agent 1: Analyzes policy text and returns structured compliance rules.
+    Agent 1: Analyzes policy text and extracts rules, and compares policy versions.
     """
 
     async def analyze(self, policy_text: str) -> Dict[str, Any]:
@@ -47,16 +97,41 @@ Return structured JSON with all compliance rules found."""
         raw_response = await llm_service.complete(SYSTEM_PROMPT, user_prompt)
         return self._parse_response(raw_response)
 
+    async def compare_versions(
+        self,
+        policy_a_name: str,
+        policy_a_version: str,
+        policy_a_text: str,
+        policy_b_name: str,
+        policy_b_version: str,
+        policy_b_text: str,
+        rules_a: Optional[List[Dict[str, Any]]] = None,
+        rules_b: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Compare two versions of a policy and return added, removed, and modified rules with risk impact.
+        """
+        user_prompt = f"""Compare Version A against Version B:
+
+=== VERSION A ({policy_a_name} - {policy_a_version}) ===
+{policy_a_text[:4000]}
+
+=== VERSION B ({policy_b_name} - {policy_b_version}) ===
+{policy_b_text[:4000]}
+
+Identify all added, removed, and modified rules, and assess overall compliance risk impact."""
+
+        raw_response = await llm_service.complete(VERSION_DIFF_SYSTEM_PROMPT, user_prompt)
+        return self._parse_version_diff(raw_response, policy_a_version, policy_b_version)
+
     def _parse_response(self, raw: str) -> Dict[str, Any]:
         """Extract JSON from LLM response."""
-        # Try direct JSON parse
         try:
             data = json.loads(raw)
             return self._validate_response(data)
         except json.JSONDecodeError:
             pass
 
-        # Try to extract JSON block from markdown
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw, re.DOTALL)
         if json_match:
             try:
@@ -65,7 +140,6 @@ Return structured JSON with all compliance rules found."""
             except json.JSONDecodeError:
                 pass
 
-        # Try to find any JSON object in the response
         obj_match = re.search(r'\{.*\}', raw, re.DOTALL)
         if obj_match:
             try:
@@ -74,7 +148,6 @@ Return structured JSON with all compliance rules found."""
             except json.JSONDecodeError:
                 pass
 
-        # Fallback: return error state
         return {
             "rules": [],
             "summary": f"Failed to parse legal agent response. Raw: {raw[:200]}"
@@ -99,6 +172,29 @@ Return structured JSON with all compliance rules found."""
         return {
             "rules": validated_rules,
             "summary": data.get("summary", f"{len(validated_rules)} rule(s) extracted.")
+        }
+
+    def _parse_version_diff(self, raw: str, ver_a: str, ver_b: str) -> Dict[str, Any]:
+        """Parse version comparison JSON response."""
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw, re.DOTALL)
+            if match:
+                try:
+                    data = json.loads(match.group(1))
+                except Exception:
+                    data = {}
+            else:
+                data = {}
+
+        return {
+            "risk_impact": data.get("risk_impact", "NEUTRAL"),
+            "summary": data.get("summary", f"Policy comparison between {ver_a} and {ver_b} completed."),
+            "added_rules": data.get("added_rules", []),
+            "removed_rules": data.get("removed_rules", []),
+            "modified_rules": data.get("modified_rules", []),
+            "detailed_diff": data.get("detailed_diff", ""),
         }
 
 

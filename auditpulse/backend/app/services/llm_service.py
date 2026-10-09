@@ -2,7 +2,7 @@
 LLM Service Layer — swappable AI provider
 Supports: OpenAI, Anthropic, Google, Mock (for testing)
 """
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import json
 import re
 from app.config import settings
@@ -71,19 +71,27 @@ class LLMService:
         """
         prompt_lower = (system_prompt + " " + user_prompt).lower()
 
+        # 0. Policy version comparison
+        if "compare version a against version b" in prompt_lower or "version diff" in prompt_lower or "policy version" in prompt_lower and "version a" in prompt_lower:
+            return self._mock_version_diff_response(user_prompt)
+
         # 1. Vendor monitoring agent
         if "vendor policy change analyst" in prompt_lower or ("vendor" in prompt_lower and ("old version" in prompt_lower or "new version" in prompt_lower)):
             return self._mock_vendor_response(user_prompt)
 
-        # 2. Compliance comparison agent
+        # 2. Evidence agent
+        if "evidence documentation agent" in prompt_lower or "document the evidence" in prompt_lower:
+            return self._mock_evidence_response(user_prompt)
+
+        # 3. Compliance comparison agent
         if "compliance analysis agent" in prompt_lower or "compare these policy rules" in prompt_lower:
             return self._mock_compliance_response(user_prompt)
 
-        # 3. Code analysis agent
+        # 4. Code analysis agent
         if "code analysis agent" in prompt_lower or ("analyze this" in prompt_lower and "source code" in prompt_lower):
             return self._mock_code_response(user_prompt)
 
-        # 4. Legal / policy agent
+        # 5. Legal / policy rule extraction agent
         if "legal agent" in prompt_lower or "extract compliance rules" in prompt_lower or "legal/compliance policy analyst" in prompt_lower:
             return self._mock_legal_response(user_prompt)
 
@@ -150,6 +158,54 @@ class LLMService:
             "summary": f"Extracted {len(rules)} compliance rule(s) from policy."
         })
 
+    def _mock_version_diff_response(self, prompt: str) -> str:
+        """Mock response for comparing policy versions."""
+        return json.dumps({
+            "risk_impact": "INCREASED_RISK",
+            "summary": "Policy v2.0 relaxes key user privacy safeguards: Customer email sharing restriction was modified, and data retention was extended from 30 to 90 days. External analytics transfers now occur without mandatory affirmative consent under modified Section 3.2.",
+            "added_rules": [
+                {
+                    "section": "6.2",
+                    "data_type": "telemetry_analytics",
+                    "action": "transmit",
+                    "destination": "cloud_partners",
+                    "condition": "legitimate_interest",
+                    "severity": "MEDIUM",
+                    "raw_text": "Telemetry and aggregated usage data may be transferred to cloud partners for quality assurance."
+                }
+            ],
+            "removed_rules": [
+                {
+                    "section": "3.1",
+                    "data_type": "device_identifier",
+                    "action": "prohibit_tracking",
+                    "destination": "third_party",
+                    "condition": "unconditional",
+                    "severity": "HIGH",
+                    "raw_text": "Third parties are strictly prohibited from tracking user hardware fingerprints."
+                }
+            ],
+            "modified_rules": [
+                {
+                    "section": "3.2",
+                    "data_type": "personal_email",
+                    "change_description": "Affirmative consent requirement relaxed to implied consent via service usage.",
+                    "old_text": "Customer email addresses must not be shared without explicit user opt-in.",
+                    "new_text": "Customer email addresses may be processed by trusted partners to facilitate notifications.",
+                    "severity": "HIGH"
+                },
+                {
+                    "section": "4.1",
+                    "data_type": "personal_data",
+                    "change_description": "Data retention duration prolonged from 30 days to 90 days post-account closure.",
+                    "old_text": "Personal data is retained for a maximum of 30 days after account closure.",
+                    "new_text": "Personal data is retained for up to 90 days after account closure.",
+                    "severity": "MEDIUM"
+                }
+            ],
+            "detailed_diff": "--- Policy v1.0\n+++ Policy v2.0\n@@ -10,3 +10,3 @@\n- Section 3.2: Explicit user opt-in required before third-party email transmission.\n+ Section 3.2: Trusted partners may process customer email for notification delivery.\n@@ -18,2 +18,2 @@\n- Section 4.1: Retained for maximum 30 days.\n+ Section 4.1: Retained for up to 90 days."
+        })
+
     def _mock_code_response(self, prompt: str) -> str:
         prompt_lower = prompt.lower()
         findings = []
@@ -157,13 +213,16 @@ class LLMService:
         destinations = []
         third_party_sdks = []
         actions = []
+        components = []
+        data_flows = []
 
         if "analytics.track" in prompt_lower or "analytics" in prompt_lower:
-            third_party_sdks.append("analytics")
+            third_party_sdks.append("analytics-sdk")
             destinations.append("analytics_service")
             actions.append("send_data")
+            components.append("Analytics Client Adapter")
             findings.append({
-                "line": 1,
+                "line": 18,
                 "pattern": "analytics.track",
                 "data": ["user.email"] if "email" in prompt_lower else ["page_data"],
                 "action": "send",
@@ -175,8 +234,13 @@ class LLMService:
         if "user.email" in prompt_lower or "email" in prompt_lower:
             sensitive_data.append("user.email")
 
+        if "identifyuser" in prompt_lower or "trackuser" in prompt_lower:
+            components.append("User Event Pipeline (trackUser)")
+            components.append("Identity Gateway (identifyUser)")
+
         if "console.log" in prompt_lower or "logger" in prompt_lower:
             actions.append("log")
+            components.append("Logging Utility")
             findings.append({
                 "line": 1,
                 "pattern": "console.log",
@@ -190,6 +254,7 @@ class LLMService:
         if "fetch(" in prompt_lower or "axios" in prompt_lower or "http" in prompt_lower:
             actions.append("network_request")
             destinations.append("external_api")
+            components.append("HTTP Transport Layer")
             findings.append({
                 "line": 1,
                 "pattern": "fetch/axios",
@@ -204,16 +269,57 @@ class LLMService:
         code_part = prompt
         if "=== SOURCE CODE ===" in prompt:
             code_part = prompt.split("=== SOURCE CODE ===")[1].split("==================")[0]
-        
-        # Remove single-line and multi-line comments so comments like "no consent check" aren't counted
+
         code_clean = re.sub(r'/\*.*?\*/', '', code_part, flags=re.DOTALL)
         code_clean = re.sub(r'//.*', '', code_clean)
         code_clean = re.sub(r'#.*', '', code_clean)
         code_clean_lower = code_clean.lower()
 
-        if ("consent" in code_clean_lower or "hasconsented" in code_clean_lower) and ("if" in code_clean_lower or "check" in code_clean_lower or "?" in code_clean_lower):
+        has_consent = ("consent" in code_clean_lower or "hasconsented" in code_clean_lower) and ("if" in code_clean_lower or "check" in code_clean_lower or "?" in code_clean_lower)
+
+        if has_consent:
             for f in findings:
                 f["consent_check_detected"] = True
+
+        if not components:
+            components = ["Application Core", "Data Dispatcher"]
+
+        # Synthesize data flows
+        if "email" in prompt_lower:
+            is_analytics = "analytics" in prompt_lower or "track" in prompt_lower
+            if is_analytics:
+                data_flows.append({
+                    "id": "DF-01",
+                    "source": "user.email (Customer Object)",
+                    "transform": "Payload Object Assembly",
+                    "sink": "analytics.track (Third-party SDK)",
+                    "data_sensitivity": "PII / High",
+                    "consent_guarded": has_consent,
+                    "component": "trackUser Function",
+                    "line": 18
+                })
+                if "identify" in prompt_lower:
+                    data_flows.append({
+                        "id": "DF-02",
+                        "source": "user.email + user.id",
+                        "transform": "Profile Identity Mapping",
+                        "sink": "analytics.identify (Third-party SDK)",
+                        "data_sensitivity": "PII / High",
+                        "consent_guarded": has_consent,
+                        "component": "identifyUser Function",
+                        "line": 26
+                    })
+            elif "console.log" in prompt_lower or "logger" in prompt_lower:
+                data_flows.append({
+                    "id": "DF-01",
+                    "source": "user.email (Customer Object)",
+                    "transform": "Local Stream Output",
+                    "sink": "console.log (Local Terminal)",
+                    "data_sensitivity": "PII / High",
+                    "consent_guarded": False,
+                    "component": "Logging Utility",
+                    "line": 1
+                })
 
         return json.dumps({
             "sensitive_data": sensitive_data,
@@ -224,12 +330,43 @@ class LLMService:
             "network_requests": [d for d in destinations if "api" in d or "endpoint" in d],
             "logging_events": ["console.log"] if "console.log" in prompt_lower else [],
             "storage_operations": [],
+            "affected_components": components,
+            "data_flows": data_flows,
             "findings": findings,
-            "summary": f"Detected {len(findings)} behavioral pattern(s) in source code."
+            "summary": f"Detected {len(findings)} behavioral pattern(s), {len(components)} affected component(s), and {len(data_flows)} data flow(s)."
         })
 
     def _mock_compliance_response(self, prompt: str) -> str:
         prompt_lower = prompt.lower()
+
+        # Check for active learned human feedback suppression
+        if "=== learned human feedback" in prompt_lower:
+            # If prompt mentions active feedback rules suppressing analytics email or false-positive
+            if "suppress" in prompt_lower or "false_positive" in prompt_lower or "exception" in prompt_lower:
+                return json.dumps({
+                    "drift_detected": False,
+                    "risk": "COMPLIANT",
+                    "confidence": 0.95,
+                    "risk_score": 0.0,
+                    "title": "Suppressed by Learned AI Feedback Rule",
+                    "reason": "This behavioral pattern matches an active human feedback rule created by legal/security review. The transfer is recognized as an approved exception or internal test pipeline.",
+                    "recommendation": "Maintained in compliance according to human reviewer rule.",
+                    "policy_reference": "Feedback Memory Rule",
+                    "code_reference": "analytics.js:18",
+                    "data_involved": "user.email",
+                    "destination": "Third-party analytics service",
+                    "policy_evidence": "\"Approved exception according to human governance review.\"",
+                    "code_evidence": "analytics.track(\"user\", { email: user.email });",
+                    "evidence_pair": {
+                        "policy_quote": "Approved exception according to human governance review.",
+                        "policy_section": "Governance Feedback",
+                        "code_snippet": "analytics.track(\"user\", { email: user.email });",
+                        "code_line": 18,
+                        "file_path": "analytics.js",
+                        "conflict_vector": "Suppressed by active reviewer feedback rule"
+                    },
+                    "suggested_fix": None
+                })
 
         # Isolate code behavior section from policy rules section
         code_behavior_part = prompt_lower
@@ -239,79 +376,180 @@ class LLMService:
             policy_rules_part = parts[0]
             code_behavior_part = parts[1]
 
-        # Check for violation scenario
-        has_email_sending = ("analytics" in code_behavior_part or "track" in code_behavior_part) and "email" in code_behavior_part
+        # Check for violation scenario (only when third-party analytics/SDK is invoked, not console.log)
+        is_only_console = ("console.log" in code_behavior_part or "console" in code_behavior_part) and "analytics" not in code_behavior_part and "third_party_sdks\": [\"analytics" not in code_behavior_part
+        has_email_sending = ("analytics" in code_behavior_part or "track" in code_behavior_part) and "email" in code_behavior_part and not is_only_console
         has_email_sharing_rule = "email" in policy_rules_part and ("shar" in policy_rules_part or "consent" in policy_rules_part or "third" in policy_rules_part or "part" in policy_rules_part)
-        
-        # Check for consent check inside the actual code behavior
+
         has_consent_check = (
             '"consent_check_detected": true' in code_behavior_part
+            or '"consent_guarded": true' in code_behavior_part
             or "hasconsented" in code_behavior_part
             or "if (user.consent" in code_behavior_part
             or "if (user.hasconsent" in code_behavior_part
             or "if (consent" in code_behavior_part
         )
 
+        if is_only_console and "email" in code_behavior_part:
+            return json.dumps({
+                "drift_detected": False,
+                "risk": "COMPLIANT",
+                "confidence": 0.95,
+                "risk_score": 0.0,
+                "title": "Local Console Logging (No External Transfer)",
+                "reason": "The code uses console.log(user.email) for local execution logging only. No external transmission or third-party sharing was detected.",
+                "recommendation": "Ensure production build strips sensitive console.log output or routes to an encrypted audit log.",
+                "policy_reference": "Privacy Policy Section 3.2",
+                "code_reference": "test.js:1",
+                "data_involved": "user.email (Local)",
+                "destination": "Local Console",
+                "policy_evidence": "\"We do not share customer email addresses with third parties.\"",
+                "code_evidence": "console.log(user.email);",
+                "evidence_pair": {
+                    "policy_quote": "We do not share customer email addresses with third parties.",
+                    "policy_section": "Section 3.2",
+                    "code_snippet": "console.log(user.email);",
+                    "code_line": 1,
+                    "file_path": "test.js",
+                    "conflict_vector": "Compliant: local console output does not constitute third-party data sharing."
+                },
+                "suggested_fix": None
+            })
+
         if has_email_sending and has_email_sharing_rule and not has_consent_check:
+            policy_quote = "Customer email addresses and personally identifiable information (PII) MUST NOT be shared with third-party analytics services without explicit, informed user consent."
+            code_line = "analytics.track(\"user\", { email: user.email, name: user.name });"
             return json.dumps({
                 "drift_detected": True,
                 "risk": "HIGH",
                 "confidence": 0.94,
-                "title": "Unauthorized Third-Party Data Transfer",
-                "reason": "Customer email (user.email) is sent to a third-party analytics service via analytics.track() without any detected consent check. The Privacy Policy (Section 3.2) explicitly prohibits sharing personal email addresses with third parties without user consent.",
-                "recommendation": "Add an explicit consent check (e.g., if (user.hasConsented('analytics'))) before calling analytics.track() with personal data. Consider using anonymized or pseudonymized identifiers instead of raw email addresses.",
+                "risk_score": 93.5,
+                "title": "Unauthorized Third-Party Data Transfer (Missing Consent Gate)",
+                "reason": "Customer email (user.email) is transmitted directly to a third-party analytics service via analytics.track() without any preceding consent verification. This directly breaches Section 3.2 of the Privacy Policy which mandates explicit user opt-in prior to third-party data disclosure.",
+                "recommendation": "Gate the analytics.track() invocation with user consent verification: if (user.consent && user.consent.analytics === true). Alternatively, use anonymized user identifiers instead of raw email addresses.",
                 "policy_reference": "Privacy Policy Section 3.2",
-                "code_reference": "analytics.js:42",
-                "data_involved": "user.email",
-                "destination": "Third-party analytics service",
-                "policy_evidence": "\"Customer email addresses must not be shared with third parties without explicit user consent.\"",
-                "code_evidence": "analytics.track(\"user\", { email: user.email });\n// No consent check detected before this call."
+                "code_reference": "analytics.js:18",
+                "data_involved": "user.email (Personally Identifiable Information)",
+                "destination": "Third-party analytics service (analytics-sdk)",
+                "policy_evidence": f"\"{policy_quote}\"",
+                "code_evidence": code_line,
+                "evidence_pair": {
+                    "policy_quote": policy_quote,
+                    "policy_section": "Section 3.2 — Data Sharing Restrictions",
+                    "code_snippet": code_line,
+                    "code_line": 18,
+                    "file_path": "analytics.js",
+                    "conflict_vector": "Code sends unencrypted user.email directly to third-party SDK without checking user.consent flag."
+                },
+                "suggested_fix": {
+                    "code_patch": "if (user.consent && user.consent.analytics === true) {\n  analytics.track(\"user\", {\n    email: user.email,\n    name: user.name\n  });\n} else {\n  analytics.track(\"user_anonymous\", { userId: user.anonymizedId });\n}",
+                    "diff": "@@ -18,4 +18,8 @@\n-  analytics.track(\"user\", {\n-    email: user.email,\n-    name: user.name\n-  });\n+  if (user.consent && user.consent.analytics === true) {\n+    analytics.track(\"user\", { email: user.email, name: user.name });\n+  } else {\n+    analytics.track(\"user_anonymous\", { userId: user.anonymizedId });\n+  }",
+                    "policy_adjustment": "If analytics tracking is strictly necessary under Legitimate Interests (GDPR Art. 6(1)(f)), ensure explicit disclosure in Section 3.2 and maintain an opt-out mechanism.",
+                    "explanation": "Wraps the analytics dispatch inside an affirmative consent check gate, eliminating the compliance drift while maintaining analytics tracking for opted-in users."
+                }
             })
         elif has_consent_check and has_email_sending:
             return json.dumps({
                 "drift_detected": False,
                 "risk": "COMPLIANT",
                 "confidence": 0.88,
-                "title": "Email sharing with consent check detected",
-                "reason": "The code shares user.email via analytics.track(), but a consent check (user.consent) is present before the operation. This appears to satisfy the policy requirement for user consent before sharing personal data with third parties.",
-                "recommendation": "Verify that the consent flag is properly set according to your consent management system.",
+                "risk_score": 0.0,
+                "title": "Email sharing with verified consent gate detected",
+                "reason": "The code transfers user.email via analytics.track(), but an explicit consent verification (user.consent) precedes the operation. This satisfies the Section 3.2 requirement for user consent before external data transmission.",
+                "recommendation": "Maintain consent state persistence and verify that user opt-out revocation is honored in real-time.",
                 "policy_reference": "Privacy Policy Section 3.2",
-                "code_reference": "analytics.js",
+                "code_reference": "analytics.js:42",
                 "data_involved": "user.email",
                 "destination": "Third-party analytics service",
                 "policy_evidence": "\"Email may be shared with third parties when the user has provided consent.\"",
-                "code_evidence": "if (user.consent) { analytics.track(\"user\", { email: user.email }); }"
+                "code_evidence": "if (user.consent && user.consent.analytics) { analytics.track(\"user\", { email: user.email }); }",
+                "evidence_pair": {
+                    "policy_quote": "Email may be shared with third parties when the user has provided consent.",
+                    "policy_section": "Section 3.2",
+                    "code_snippet": "if (user.consent && user.consent.analytics) { analytics.track(\"user\", { email: user.email }); }",
+                    "code_line": 42,
+                    "file_path": "analytics.js",
+                    "conflict_vector": "Compliant: consent check gate is present and verified."
+                },
+                "suggested_fix": None
             })
         elif "page_view" in prompt_lower or "page" in prompt_lower:
             return json.dumps({
                 "drift_detected": False,
                 "risk": "COMPLIANT",
                 "confidence": 0.97,
+                "risk_score": 0.0,
                 "title": "No Personal Data Sharing Detected",
-                "reason": "The analytics tracking call transmits only non-personal page view data (page path). No personal identifiable information (PII) such as email addresses or user identifiers is shared with third parties.",
-                "recommendation": "No action required. Continue to monitor for changes.",
+                "reason": "The analytics tracking invocation transmits non-personal telemetry data (page path). No PII or customer identifiers are exposed to external services.",
+                "recommendation": "No action required. Continuous surveillance active.",
                 "policy_reference": "Privacy Policy Section 3.2",
-                "code_reference": "analytics.js",
+                "code_reference": "analytics.js:12",
                 "data_involved": "page_path (non-PII)",
                 "destination": "Analytics service",
                 "policy_evidence": "\"Customer email addresses must not be shared with third parties.\"",
-                "code_evidence": "analytics.track(\"page_view\", { page: \"/home\" })"
+                "code_evidence": "analytics.track(\"page_view\", { page: \"/home\" });",
+                "evidence_pair": {
+                    "policy_quote": "Customer email addresses must not be shared with third parties.",
+                    "policy_section": "Section 3.2",
+                    "code_snippet": "analytics.track(\"page_view\", { page: \"/home\" });",
+                    "code_line": 12,
+                    "file_path": "analytics.js",
+                    "conflict_vector": "Compliant: only non-PII telemetry data sent."
+                },
+                "suggested_fix": None
             })
         else:
             return json.dumps({
                 "drift_detected": False,
                 "risk": "LOW",
                 "confidence": 0.72,
+                "risk_score": 25.0,
                 "title": "No significant compliance drift detected",
-                "reason": "The analyzed code behavior does not appear to conflict with the extracted policy rules. However, confidence is moderate — a full manual review is recommended.",
-                "recommendation": "Conduct a manual review of the code to ensure full compliance.",
-                "policy_reference": "N/A",
-                "code_reference": "N/A",
-                "data_involved": "N/A",
-                "destination": "N/A",
+                "reason": "Analyzed code behavior aligns with extracted policy constraints. Confidence is moderate.",
+                "recommendation": "Schedule routine automated PR scans to preserve compliance baseline.",
+                "policy_reference": "General Policy",
+                "code_reference": "source.js:1",
+                "data_involved": "telemetry",
+                "destination": "internal",
                 "policy_evidence": "Policy rules analyzed.",
-                "code_evidence": "Code behavior analyzed."
+                "code_evidence": "Code behavior analyzed.",
+                "evidence_pair": {
+                    "policy_quote": "Policy rules analyzed.",
+                    "policy_section": "General",
+                    "code_snippet": "Code behavior analyzed.",
+                    "code_line": 1,
+                    "file_path": "source.js",
+                    "conflict_vector": "Baseline verified"
+                },
+                "suggested_fix": None
             })
+
+    def _mock_evidence_response(self, prompt: str) -> str:
+        policy_quote = "Customer email addresses and personally identifiable information (PII) MUST NOT be shared with third-party analytics services without explicit, informed user consent."
+        code_line = "analytics.track(\"user\", { email: user.email, name: user.name });"
+        return json.dumps({
+            "policy_evidence_quote": policy_quote,
+            "code_evidence_snippet": code_line,
+            "interpretation": "Direct violation of privacy covenant: PII transmitted to external analytics SDK without affirmative consent gate.",
+            "impact_assessment": "GDPR Article 83 administrative fines up to 4% of annual global turnover, plus potential CCPA statutory damages.",
+            "recommended_action": "Wrap analytics.track call in consent gate: if (user.consent && user.consent.analytics).",
+            "evidence_strength": "STRONG",
+            "evidence_pair": {
+                "policy_quote": policy_quote,
+                "policy_section": "Section 3.2 — Data Sharing Restrictions",
+                "code_snippet": code_line,
+                "code_line": 18,
+                "file_path": "analytics.js",
+                "conflict_vector": "Unchecked PII transfer breaches affirmative opt-in requirement"
+            },
+            "suggested_fix": {
+                "code_patch": "if (user.consent && user.consent.analytics === true) {\n  analytics.track(\"user\", { email: user.email });\n}",
+                "diff": "- analytics.track(\"user\", { email: user.email });\n+ if (user.consent && user.consent.analytics === true) {\n+   analytics.track(\"user\", { email: user.email });\n+ }",
+                "policy_adjustment": "Update privacy disclosure if legitimate interest is claimed.",
+                "explanation": "Guards the network sink behind a verified consent flag."
+            },
+            "disclaimer": "⚠️ This is AI-assisted compliance analysis. It does not replace professional legal advice."
+        })
 
     def _mock_vendor_response(self, prompt: str) -> str:
         return json.dumps({
@@ -324,9 +562,22 @@ class LLMService:
                     "section": "Data Retention",
                     "severity": "HIGH",
                     "impact": "Vendor now retains customer data 6x longer than previously stated. Review whether this conflicts with your data minimization requirements."
+                },
+                {
+                    "type": "subprocessor_expansion",
+                    "old_value": "No third-party ad sharing",
+                    "new_value": "Aggregated analytics sharing with third parties",
+                    "section": "Third-Party Sharing",
+                    "severity": "HIGH",
+                    "impact": "Vendor policy permits sharing with external analytics brokers, affecting user data flows."
                 }
             ],
-            "summary": "Significant retention policy change detected: data retention increased from 30 to 180 days."
+            "affected_components": [
+                "analytics.js (AnalyticsPro Event Tracker)",
+                "UserProfileController.ts (User Metadata Sync)",
+                "dataPipeline.py (Nightly Batch Export)"
+            ],
+            "summary": "Significant vendor drift detected: data retention increased from 30 to 180 days and third-party analytics sharing introduced. Impacted components: analytics.js, UserProfileController.ts."
         })
 
 

@@ -1,11 +1,15 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { policyApi } from '../services/api';
 import { RiskBadge, ToastContainer } from '../components/shared';
 import { useToast } from '../hooks/useAsync';
-import { Upload, FileText, Sparkles, ChevronDown, ChevronUp, AlertCircle, CheckCircle, Shield, ArrowRight } from 'lucide-react';
+import {
+  Upload, FileText, Sparkles, ChevronDown, ChevronUp,
+  AlertCircle, CheckCircle, Shield, ArrowRight, GitCompare,
+  PlusCircle, MinusCircle, RefreshCw, AlertTriangle
+} from 'lucide-react';
 
-const DEMO_POLICY = `AuditCorp Privacy Policy — Version 2.0
+const DEMO_POLICY_V1 = `AuditCorp Privacy Policy — Version 1.0
 
 Section 3.2 — Data Sharing Restrictions
 Customer email addresses and personally identifiable information (PII) MUST NOT be shared with
@@ -13,13 +17,23 @@ third-party analytics services, advertising networks, or data brokers without ex
 user consent. Users must actively opt in before any PII is transmitted to third parties.
 
 Section 4.1 — Data Retention
-Personal data is retained for the minimum period necessary, not to exceed 90 days after account
-closure unless required by law.
+Personal data is retained for the minimum period necessary, not to exceed 30 days after account
+closure unless required by law.`;
 
-Section 5.1 — Security
-Access to personal data is restricted to authorized personnel only.`;
+const DEMO_POLICY_V2 = `AuditCorp Privacy Policy — Version 2.0 (Updated)
+
+Section 3.2 — Data Processing & Trusted Partners
+Customer email addresses and usage telemetry may be processed by trusted third-party analytics
+partners to improve service delivery and product personalization.
+
+Section 4.1 — Extended Data Retention
+Personal data is retained for up to 180 days after account closure for business reporting.
+
+Section 6.2 — Cloud Telemetry
+Aggregated usage data and diagnostics may be transmitted to cloud partners under Legitimate Interests.`;
 
 export default function PolicyAnalysis() {
+  const [mainTab, setMainTab] = useState('parse'); // 'parse' | 'compare'
   const [mode, setMode] = useState('text'); // 'text' | 'file'
   const [name, setName] = useState('');
   const [version, setVersion] = useState('1.0');
@@ -28,8 +42,33 @@ export default function PolicyAnalysis() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [expandedRule, setExpandedRule] = useState(null);
+
+  // Version Comparison State
+  const [policies, setPolicies] = useState([]);
+  const [comparePolicyA, setComparePolicyA] = useState('');
+  const [comparePolicyB, setComparePolicyB] = useState('');
+  const [newVersionText, setNewVersionText] = useState(DEMO_POLICY_V2);
+  const [compareResult, setCompareResult] = useState(null);
+  const [comparing, setComparing] = useState(false);
+
   const fileInputRef = useRef();
   const { toasts, showToast, removeToast } = useToast();
+
+  const loadPolicies = useCallback(async () => {
+    try {
+      const res = await policyApi.list();
+      setPolicies(res.data);
+      if (res.data.length > 0 && !comparePolicyA) {
+        setComparePolicyA(res.data[0].id.toString());
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [comparePolicyA]);
+
+  useEffect(() => {
+    loadPolicies();
+  }, [loadPolicies]);
 
   const handleAnalyze = useCallback(async () => {
     if (!name.trim()) { showToast('Please enter a policy name.', 'warning'); return; }
@@ -51,23 +90,41 @@ export default function PolicyAnalysis() {
       }
       setResult(res.data);
       showToast(`Extracted ${res.data.rules_extracted} compliance rule(s) successfully!`, 'success');
+      loadPolicies();
     } catch (e) {
       showToast(e.userMessage || 'Analysis failed. Is the backend running?', 'error');
     } finally {
       setLoading(false);
     }
-  }, [mode, name, version, content, file, showToast]);
+  }, [mode, name, version, content, file, showToast, loadPolicies]);
+
+  const handleCompareVersions = async () => {
+    if (!comparePolicyA) {
+      showToast('Please select baseline Policy Version A.', 'warning');
+      return;
+    }
+    setComparing(true);
+    setCompareResult(null);
+    try {
+      const res = await policyApi.compareVersions({
+        policy_id_a: parseInt(comparePolicyA),
+        policy_id_b: comparePolicyB ? parseInt(comparePolicyB) : null,
+        new_content: comparePolicyB ? null : newVersionText,
+        new_version: '2.0',
+      });
+      setCompareResult(res.data);
+      showToast('Policy version comparison complete!', 'success');
+    } catch (e) {
+      showToast(e.userMessage || 'Version comparison failed', 'error');
+    } finally {
+      setComparing(false);
+    }
+  };
 
   const handleDrop = (e) => {
     e.preventDefault();
     const f = e.dataTransfer.files[0];
     if (f) setFile(f);
-  };
-
-  const SEVERITY_CONFIG = {
-    HIGH: { label: 'Critical Obligation', color: 'var(--risk-high-light)', border: 'rgba(239, 68, 68, 0.4)', bg: 'rgba(239, 68, 68, 0.08)' },
-    MEDIUM: { label: 'Important Rule', color: 'var(--risk-medium-light)', border: 'rgba(245, 158, 11, 0.4)', bg: 'rgba(245, 158, 11, 0.08)' },
-    LOW: { label: 'General Guideline', color: 'var(--risk-low-light)', border: 'rgba(59, 130, 246, 0.4)', bg: 'rgba(59, 130, 246, 0.08)' },
   };
 
   return (
@@ -89,327 +146,449 @@ export default function PolicyAnalysis() {
             }}>
               <FileText size={22} color="white" />
             </span>
-            <span className="gradient-text">Policy Parser & Legal Rule Extractor</span>
+            <span className="gradient-text">Policy Parser & Version Evolution</span>
           </h1>
           <p>
-            Upload or paste your company's privacy policy, terms of service, or GDPR/CCPA declarations.
-            The Legal AI Agent decomposes unstructured legal clauses into machine-verifiable compliance rules.
+            Extract structured legal rules from privacy documents and track policy changes across versions.
+            Identify removed protections, loosened consent gates, and retention prolongations.
           </p>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 1.15fr', gap: '1.75rem', alignItems: 'start' }}>
+      {/* Main Mode Selector */}
+      <div className="tab-bar" style={{ marginBottom: '1.5rem' }}>
+        <button className={`tab ${mainTab === 'parse' ? 'active' : ''}`} onClick={() => setMainTab('parse')}>
+          📄 Rule Extraction & Parsing
+        </button>
+        <button className={`tab ${mainTab === 'compare' ? 'active' : ''}`} onClick={() => { setMainTab('compare'); loadPolicies(); }}>
+          ⚖️ Version Diff & Policy Evolution Comparison
+        </button>
+      </div>
 
-        {/* Input Panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div className="card">
-            {/* Mode Tabs */}
-            <div className="tab-bar">
-              <button className={`tab ${mode === 'text' ? 'active' : ''}`} onClick={() => setMode('text')}>
-                📝 Paste Policy Text
-              </button>
-              <button className={`tab ${mode === 'file' ? 'active' : ''}`} onClick={() => setMode('file')}>
-                📁 Upload Document (.txt / .md / .pdf)
-              </button>
-            </div>
-
-            {/* Policy Name & Version */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
-                  Policy Document Name *
-                </label>
-                <input
-                  className="input"
-                  placeholder="e.g. AuditCorp Privacy Policy, ToS v2"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  id="policy-name"
-                />
+      {mainTab === 'parse' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 1.15fr', gap: '1.75rem', alignItems: 'start' }}>
+          {/* Input Panel */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div className="card">
+              {/* Mode Tabs */}
+              <div className="tab-bar">
+                <button className={`tab ${mode === 'text' ? 'active' : ''}`} onClick={() => setMode('text')}>
+                  📝 Paste Policy Text
+                </button>
+                <button className={`tab ${mode === 'file' ? 'active' : ''}`} onClick={() => setMode('file')}>
+                  📁 Upload Document (.txt / .md / .pdf)
+                </button>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
-                  Version
-                </label>
-                <input
-                  className="input"
-                  value={version}
-                  onChange={(e) => setVersion(e.target.value)}
-                  placeholder="1.0"
-                />
-              </div>
-            </div>
-
-            {/* Content Input */}
-            {mode === 'text' ? (
-              <div style={{ marginBottom: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                  <label style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    Policy Text *
+              {/* Policy Name & Version */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
+                    Policy Document Name *
                   </label>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }}
-                    onClick={() => { setContent(DEMO_POLICY); setName('AuditCorp Privacy Policy'); setVersion('2.0'); }}
-                  >
-                    <Sparkles size={13} color="var(--accent-purple)" />
-                    Load Sample Policy
-                  </button>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g. AuditCorp Privacy Policy"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
                 </div>
-                <textarea
-                  className="textarea"
-                  placeholder="Paste your privacy policy, terms of service, or compliance agreement here..."
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  style={{ minHeight: 260 }}
-                  id="policy-content"
-                />
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{content.length} characters</span>
-                  <span>Supports Markdown, plain text, and numbered clauses</span>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
+                    Version
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="1.0"
+                    value={version}
+                    onChange={(e) => setVersion(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {mode === 'text' ? (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                    <label style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                      Policy Text Content *
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem', gap: '0.35rem' }}
+                      onClick={() => {
+                        setName('AuditCorp Privacy Policy');
+                        setVersion('1.0');
+                        setContent(DEMO_POLICY_V1);
+                      }}
+                    >
+                      <Sparkles size={12} color="var(--accent-purple)" />
+                      Load Demo Policy
+                    </button>
+                  </div>
+                  <textarea
+                    className="input"
+                    rows={12}
+                    placeholder="Paste full privacy policy text, Terms of Service, or GDPR clauses here..."
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    style={{ resize: 'vertical', fontFamily: 'Inter, sans-serif', fontSize: '0.85rem' }}
+                  />
+                </div>
+              ) : (
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    border: '2px dashed var(--border)',
+                    borderRadius: 14,
+                    padding: '2.5rem 1.5rem',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    background: 'var(--bg-secondary)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <Upload size={32} color="var(--accent-purple)" style={{ margin: '0 auto 0.75rem' }} />
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                    {file ? file.name : 'Click to select or drag and drop document'}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Supports TXT, MD, and PDF (Max 10MB)
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".txt,.md,.pdf"
+                    style={{ display: 'none' }}
+                    onChange={(e) => setFile(e.target.files[0])}
+                  />
+                </div>
+              )}
+
+              <button
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: '1.25rem', padding: '0.75rem' }}
+                onClick={handleAnalyze}
+                disabled={loading}
+              >
+                {loading ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                {loading ? 'Legal Agent Decomposing Rules...' : 'Extract Compliance Rules (Legal Agent)'}
+              </button>
+            </div>
+          </div>
+
+          {/* Results Panel */}
+          <div>
+            {result ? (
+              <div className="card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
+                      Extracted Rules ({result.rules_extracted})
+                    </h3>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {result.policy.name} • v{result.policy.version}
+                    </span>
+                  </div>
+                  <Link to="/drift" className="btn btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.78rem' }}>
+                    Verify Code AST <ArrowRight size={13} />
+                  </Link>
+                </div>
+
+                <div style={{
+                  padding: '0.85rem 1rem',
+                  background: 'rgba(59, 130, 246, 0.05)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  borderRadius: 10,
+                  fontSize: '0.82rem',
+                  color: 'var(--text-secondary)',
+                  marginBottom: '1.25rem'
+                }}>
+                  <strong>Summary:</strong> {result.analysis_summary}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {result.policy.rules.map((rule, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        padding: '1rem',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => setExpandedRule(expandedRule === idx ? null : idx)}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                          <RiskBadge risk={rule.severity} />
+                          <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>
+                            {rule.section && `[${rule.section}] `}{rule.action} → {rule.data_type}
+                          </span>
+                        </div>
+                        {expandedRule === idx ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </div>
+
+                      {expandedRule === idx && (
+                        <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)', fontSize: '0.82rem' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <div><strong>Destination:</strong> {rule.destination}</div>
+                            <div><strong>Condition:</strong> {rule.condition || 'None'}</div>
+                          </div>
+                          {rule.raw_text && (
+                            <blockquote style={{ margin: '0.5rem 0 0', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+                              "{rule.raw_text}"
+                            </blockquote>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : (
-              <div
-                className={`upload-zone ${file ? 'dragover' : ''}`}
-                style={{ marginBottom: '1.25rem' }}
-                onDrop={handleDrop}
-                onDragOver={(e) => e.preventDefault()}
-                onClick={() => fileInputRef.current?.click()}
+              <div className="card" style={{ textAlign: 'center', padding: '3.5rem 2rem' }}>
+                <FileText size={48} color="var(--text-muted)" style={{ margin: '0 auto 1rem', opacity: 0.6 }} />
+                <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>No Policy Analyzed Yet</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>
+                  Enter policy text or upload a document on the left and trigger Legal Agent analysis.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Version Comparison Tab */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
+                  Compare Policy Versions (Evolution & Risk Drift)
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  Evaluate modifications between policy versions to determine if user safeguards were removed or data retention expanded.
+                </p>
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  setNewVersionText(DEMO_POLICY_V2);
+                  showToast('Loaded demo Policy v2.0 text for comparison', 'info');
+                }}
+                style={{ fontSize: '0.75rem' }}
               >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  style={{ display: 'none' }}
-                  accept=".txt,.md,.pdf"
-                  onChange={(e) => setFile(e.target.files[0])}
+                <Sparkles size={13} color="var(--accent-purple)" /> Load Demo v2.0 Text
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Baseline Policy (Version A) *
+                </label>
+                <select
+                  className="input"
+                  value={comparePolicyA}
+                  onChange={(e) => setComparePolicyA(e.target.value)}
+                >
+                  <option value="">-- Select Saved Baseline Policy --</option>
+                  {policies.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Comparison Target (Version B)
+                </label>
+                <select
+                  className="input"
+                  value={comparePolicyB}
+                  onChange={(e) => setComparePolicyB(e.target.value)}
+                >
+                  <option value="">-- Or type new version text below --</option>
+                  {policies.filter(p => p.id.toString() !== comparePolicyA).map(p => (
+                    <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {!comparePolicyB && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Version B Content (Draft / New Release)
+                </label>
+                <textarea
+                  className="input"
+                  rows={6}
+                  value={newVersionText}
+                  onChange={(e) => setNewVersionText(e.target.value)}
+                  placeholder="Paste revised policy version text..."
+                  style={{ fontSize: '0.82rem', fontFamily: 'JetBrains Mono, monospace' }}
                 />
-                {file ? (
-                  <div>
-                    <CheckCircle size={36} color="var(--risk-compliant)" style={{ margin: '0 auto 0.75rem' }} />
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{file.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                      {(file.size / 1024).toFixed(1)} KB • Click to swap file
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <Upload size={36} color="var(--accent-indigo)" style={{ margin: '0 auto 0.75rem' }} />
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Drop policy file here or click to browse</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                      Supports: .txt, .md, .pdf (extracts text automatically)
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
             <button
               className="btn btn-primary"
-              style={{ width: '100%', justifyContent: 'center', padding: '0.8rem' }}
-              onClick={handleAnalyze}
-              disabled={loading}
-              id="analyze-policy-btn"
+              onClick={handleCompareVersions}
+              disabled={comparing}
+              style={{ width: '100%', padding: '0.75rem' }}
             >
-              {loading ? (
-                <><div className="spinner" /> Parsing Clauses with Legal Agent...</>
-              ) : (
-                <><Sparkles size={16} /> Extract Structured Compliance Rules</>
-              )}
+              {comparing ? <RefreshCw size={16} className="animate-spin" /> : <GitCompare size={16} />}
+              {comparing ? 'AI Comparing Policy Versions...' : 'Run Policy Version Diff & Risk Impact Assessment'}
             </button>
           </div>
 
-          {/* Legal Agent Architecture Callout */}
-          <div className="card" style={{
-            background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(59, 130, 246, 0.05) 100%)',
-            border: '1px solid rgba(139, 92, 246, 0.25)'
-          }}>
-            <h4 style={{ margin: '0 0 0.85rem 0', fontSize: '0.95rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Shield size={16} color="var(--accent-purple)" />
-              How the Legal Agent Works
-            </h4>
-            {[
-              ['Identifies Legal Obligations', 'Scans for prohibitive vs permissive statements regarding user privacy.'],
-              ['Extracts Data Classes', 'Discovers personal emails, PII, financial credentials, health indicators.'],
-              ['Evaluates Required Conditions', 'Maps prerequisite conditions such as explicit user opt-in consent.'],
-              ['Assigns Severity Levels', 'Categorizes obligations into Critical (High), Important (Medium), and Low.'],
-            ].map(([title, desc]) => (
-              <div key={title} style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <CheckCircle size={15} color="var(--risk-compliant)" style={{ marginTop: 2, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Results Panel */}
-        <div>
-          {!result && !loading && (
-            <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-              <FileText size={52} color="var(--accent-purple)" style={{ opacity: 0.5, margin: '0 auto 1.25rem' }} />
-              <h3 style={{ fontWeight: 800, margin: '0 0 0.5rem', fontFamily: 'Outfit, sans-serif', fontSize: '1.2rem' }}>
-                Ready to Extract Rules
-              </h3>
-              <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem', maxWidth: 360, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
-                Click "Load Sample Policy" on the left and run analysis to inspect structured compliance obligations.
-              </p>
-            </div>
-          )}
-
-          {result && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Summary Banner */}
-              <div className="alert alert-compliant">
-                <CheckCircle size={20} color="var(--risk-compliant)" style={{ flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontWeight: 800, color: 'var(--risk-compliant)', fontSize: '0.95rem' }}>
-                    Extraction Succeeded — {result.rules_extracted} Verifiable Rules Discovered
-                  </div>
-                  <div style={{ fontSize: '0.825rem', color: 'var(--text-primary)', marginTop: 2 }}>
-                    {result.analysis_summary}
-                  </div>
-                </div>
-              </div>
-
-              {/* Policy Header Card */}
-              <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '1.15rem', fontFamily: 'Outfit, sans-serif' }}>
-                      {result.policy.name}
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                      Version {result.policy.version} · Policy ID #{result.policy.id}
-                    </div>
-                  </div>
-                  <div style={{
-                    padding: '0.35rem 0.85rem',
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
-                    borderRadius: 8, fontSize: '0.8rem', fontWeight: 800, color: 'var(--risk-compliant)'
-                  }}>
-                    DATABASE SAVED
-                  </div>
-                </div>
-              </div>
-
-              {/* Rules List */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Extracted Obligations ({result.policy.rules.length})
-                </span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Click rule card to view conditions
-                </span>
-              </div>
-
-              {result.policy.rules.map((rule, i) => {
-                const expanded = expandedRule === i;
-                const conf = SEVERITY_CONFIG[rule.severity] || SEVERITY_CONFIG.MEDIUM;
-
-                return (
-                  <div
-                    key={i}
-                    className="card"
-                    style={{
-                      padding: '1.125rem 1.35rem',
-                      borderLeft: `4px solid ${conf.color}`,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onClick={() => setExpandedRule(expanded ? null : i)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        <RiskBadge risk={rule.severity} />
-                        {rule.section && (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan-bright)', fontFamily: 'JetBrains Mono, monospace' }}>
-                            §{rule.section}
-                          </span>
-                        )}
-                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {rule.data_type} → {rule.action} → {rule.destination}
-                        </span>
-                      </div>
-                      {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </div>
-
-                    {expanded && (
-                      <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-                          {[
-                            ['Data Type', rule.data_type],
-                            ['Required Action', rule.action],
-                            ['Destination', rule.destination],
-                            ['Condition / Consent', rule.condition || 'None (Unconditional)'],
-                            ['Severity Level', conf.label],
-                            ['Document Section', rule.section || 'General'],
-                          ].map(([lbl, val]) => (
-                            <div key={lbl} style={{
-                              background: 'rgba(255, 255, 255, 0.02)',
-                              padding: '0.6rem 0.85rem',
-                              borderRadius: 8,
-                              border: '1px solid var(--border)'
-                            }}>
-                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
-                                {lbl}
-                              </div>
-                              <div style={{ fontSize: '0.825rem', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-primary)', fontWeight: 600 }}>
-                                {val}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        {rule.raw_text && (
-                          <blockquote style={{
-                            margin: 0, padding: '0.85rem 1rem',
-                            background: 'rgba(59, 130, 246, 0.08)',
-                            borderLeft: '3px solid var(--accent-indigo)',
-                            borderRadius: '0 8px 8px 0',
-                            fontSize: '0.825rem', fontStyle: 'italic', color: 'var(--text-secondary)'
-                          }}>
-                            "{rule.raw_text}"
-                          </blockquote>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Next Step Banner */}
+          {compareResult && (
+            <div className="card">
+              {/* Header Badge */}
               <div style={{
-                padding: '1rem 1.25rem',
-                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%)',
-                border: '1px solid var(--border-bright)',
-                borderRadius: 12,
                 display: 'flex',
-                alignItems: 'center',
                 justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '0.75rem'
+                alignItems: 'center',
+                paddingBottom: '1rem',
+                borderBottom: '1px solid var(--border)',
+                marginBottom: '1.25rem'
               }}>
                 <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                    Rules Ready for Code Verification
+                  <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>
+                    Version Comparison
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                    Now scan your application source code to test if developer implementations match these promises.
+                  <h2 style={{ margin: '2px 0 0', fontSize: '1.25rem', fontWeight: 800 }}>
+                    {compareResult.policy_a_name} ({compareResult.policy_a_version}) ➔ {compareResult.policy_b_name} ({compareResult.policy_b_version})
+                  </h2>
+                </div>
+                <span style={{
+                  padding: '0.45rem 1rem',
+                  borderRadius: 10,
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  background: compareResult.risk_impact === 'INCREASED_RISK' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                  color: compareResult.risk_impact === 'INCREASED_RISK' ? 'var(--risk-high)' : 'var(--risk-compliant)',
+                  border: `1px solid ${compareResult.risk_impact === 'INCREASED_RISK' ? 'rgba(239, 68, 68, 0.35)' : 'rgba(16, 185, 129, 0.35)'}`
+                }}>
+                  {compareResult.risk_impact === 'INCREASED_RISK' ? '⚠️ INCREASED COMPLIANCE RISK' : '✅ NEUTRAL / LOW RISK SHIFT'}
+                </span>
+              </div>
+
+              {/* Summary */}
+              <div style={{
+                padding: '1rem 1.25rem',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                fontSize: '0.88rem',
+                lineHeight: 1.65,
+                color: 'var(--text-primary)',
+                marginBottom: '1.5rem'
+              }}>
+                <strong>Executive Assessment:</strong> {compareResult.summary}
+              </div>
+
+              {/* Added, Removed, Modified Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                {/* Added Rules */}
+                <div style={{ background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: 12, padding: '1rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--risk-compliant)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <PlusCircle size={14} /> Added Rules ({compareResult.added_rules?.length || 0})
+                  </div>
+                  {compareResult.added_rules?.length > 0 ? (
+                    compareResult.added_rules.map((r, i) => (
+                      <div key={i} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.75rem', marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                        <div style={{ fontWeight: 700 }}>{r.section && `[${r.section}] `}{r.action} → {r.data_type}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: 2 }}>Destination: {r.destination}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No new rules added.</div>
+                  )}
+                </div>
+
+                {/* Removed Rules */}
+                <div style={{ background: 'rgba(239, 68, 68, 0.04)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 12, padding: '1rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--risk-high)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <MinusCircle size={14} /> Removed Protections ({compareResult.removed_rules?.length || 0})
+                  </div>
+                  {compareResult.removed_rules?.length > 0 ? (
+                    compareResult.removed_rules.map((r, i) => (
+                      <div key={i} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.75rem', marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--risk-high)' }}>{r.section && `[${r.section}] `}{r.action} → {r.data_type}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: 2 }}>Condition removed: {r.condition || 'None'}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No safeguards deleted.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modified Rules */}
+              {compareResult.modified_rules?.length > 0 && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>
+                    🔄 Modified Covenants & Terms
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {compareResult.modified_rules.map((m, i) => (
+                      <div key={i} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                            {m.section && `[${m.section}] `}{m.data_type}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--risk-medium)', fontWeight: 800, textTransform: 'uppercase' }}>
+                            {m.severity} MODIFICATION
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                          <strong>Impact:</strong> {m.change_description}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.78rem' }}>
+                          <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '0.5rem', borderRadius: 6 }}>
+                            <strong style={{ color: 'var(--risk-high)' }}>Old Text (v{compareResult.policy_a_version}):</strong> {m.old_text}
+                          </div>
+                          <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '0.5rem', borderRadius: 6 }}>
+                            <strong style={{ color: 'var(--risk-compliant)' }}>New Text (v{compareResult.policy_b_version}):</strong> {m.new_text}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <Link to="/code" className="btn btn-cyan" style={{ padding: '0.45rem 1rem', fontSize: '0.8rem' }}>
-                  Analyze Code AST <ArrowRight size={14} />
-                </Link>
-              </div>
+              )}
+
+              {/* Detailed Unified Diff */}
+              {compareResult.detailed_diff && (
+                <div>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>
+                    Unified Text Diff
+                  </h4>
+                  <pre style={{
+                    background: '#0F172A',
+                    color: '#F8FAFC',
+                    padding: '1rem',
+                    borderRadius: 10,
+                    fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: '0.78rem',
+                    lineHeight: 1.5,
+                    overflowX: 'auto'
+                  }}>
+                    {compareResult.detailed_diff}
+                  </pre>
+                </div>
+              )}
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

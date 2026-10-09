@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom';
 import { codeApi } from '../services/api';
 import { ToastContainer } from '../components/shared';
 import { useToast } from '../hooks/useAsync';
-import { Upload, Code2, Sparkles, CheckCircle, AlertTriangle, Shield, ArrowRight, Terminal } from 'lucide-react';
+import {
+  Upload, Code2, Sparkles, CheckCircle, AlertTriangle, Shield,
+  ArrowRight, Terminal, Network, Layers, Cpu, ArrowDown
+} from 'lucide-react';
 import { getLanguageLabel } from '../utils/helpers';
 
 const DEMO_VIOLATING = `/**
@@ -91,7 +94,7 @@ export default function CodeAnalysis() {
         res = await codeApi.upload(form);
       }
       setResult(res.data);
-      showToast('AST code analysis completed successfully!', 'success');
+      showToast('AST code analysis completed: Identified components & data flows!', 'success');
     } catch (e) {
       showToast(e.userMessage || 'Code analysis failed. Is the backend running?', 'error');
     } finally {
@@ -127,11 +130,11 @@ export default function CodeAnalysis() {
             }}>
               <Code2 size={22} color="white" />
             </span>
-            <span className="gradient-text-cyan">Static Code Behavior & AST Analyzer</span>
+            <span className="gradient-text-cyan">Code Analysis & Data Flow Mapping</span>
           </h1>
           <p>
-            Scans source code for compliance-critical behavioral sinks: PII variables, analytics SDK invocations,
-            unauthorized network transfers, and consent wrapper guards using Tree-sitter AST and LLM reasoning.
+            Scans source code for compliance-critical behavioral sinks, maps affected components,
+            and traces end-to-end data flows (Source ➔ Transform ➔ Sink) with consent guard status.
           </p>
         </div>
       </div>
@@ -218,36 +221,28 @@ export default function CodeAnalysis() {
               </>
             ) : (
               <div
-                className={`upload-zone ${file ? 'dragover' : ''}`}
-                style={{ marginBottom: '1.25rem' }}
                 onClick={() => fileInputRef.current?.click()}
-                onDrop={(e) => { e.preventDefault(); setFile(e.dataTransfer.files[0]); }}
-                onDragOver={(e) => e.preventDefault()}
+                style={{
+                  border: '2px dashed var(--border)',
+                  borderRadius: 14,
+                  padding: '2.5rem 1.5rem',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  background: 'var(--bg-secondary)',
+                  marginBottom: '1.25rem'
+                }}
               >
+                <Upload size={32} color="var(--accent-cyan-bright)" style={{ margin: '0 auto 0.75rem' }} />
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                  {file ? file.name : 'Click to select source code file'}
+                </div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  style={{ display: 'none' }}
                   accept=".js,.ts,.jsx,.tsx,.py,.java,.go"
+                  style={{ display: 'none' }}
                   onChange={(e) => setFile(e.target.files[0])}
                 />
-                {file ? (
-                  <div>
-                    <CheckCircle size={36} color="var(--risk-compliant)" style={{ margin: '0 auto 0.75rem' }} />
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{file.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                      {(file.size / 1024).toFixed(1)} KB • Click to choose another
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <Upload size={36} color="var(--accent-cyan-bright)" style={{ margin: '0 auto 0.75rem' }} />
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Drop code file or click to browse</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                      Supports: .js, .ts, .jsx, .tsx, .py, .java, .go
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -259,9 +254,9 @@ export default function CodeAnalysis() {
               id="analyze-code-btn"
             >
               {loading ? (
-                <><div className="spinner" /> Analyzing Syntax Tree with Code Agent...</>
+                <><div className="spinner" /> Analyzing Syntax Tree & Data Flows...</>
               ) : (
-                <><Sparkles size={16} /> Analyze Code Sinks & Sensitive Data</>
+                <><Sparkles size={16} /> Trace Data Flows & Affected Components</>
               )}
             </button>
           </div>
@@ -273,14 +268,13 @@ export default function CodeAnalysis() {
           }}>
             <h4 style={{ margin: '0 0 0.85rem 0', fontSize: '0.95rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Terminal size={16} color="var(--accent-cyan-bright)" />
-              What Code Agent AST Discovers
+              What Code Agent Identifies
             </h4>
             {[
-              ['PII & Sensitive Variables', 'user.email, phone, SSN, authToken, creditCard, password'],
-              ['Telemetry & Analytics SDKs', 'Mixpanel, Segment, Google Analytics, Sentry, Intercom'],
-              ['External Network Calls', 'fetch(), axios.post(), http.request(), XMLHttpRequest'],
-              ['Conditional Consent Guards', 'if (user.consent), hasConsented(), optInVerified'],
-              ['Persistence & Storage', 'localStorage.setItem, cookies, database write queries'],
+              ['Affected Components & Modules', 'Identifies functions, controllers, and service layers executing data sinks'],
+              ['End-to-End Data Flows', 'Traces data pipelines: Source (PII) ➔ Transformation ➔ Third-party Sink'],
+              ['Conditional Consent Guards', 'Verifies if opt-in verification or consent gates protect the execution'],
+              ['Sensitive Data & Sinks', 'Maps user.email, phone, SSN, authToken against Mixpanel, Segment, Stripe'],
             ].map(([title, desc]) => (
               <div key={title} style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.65rem' }}>
                 <CheckCircle size={15} color="var(--accent-cyan-bright)" style={{ marginTop: 2, flexShrink: 0 }} />
@@ -299,16 +293,16 @@ export default function CodeAnalysis() {
             <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
               <Code2 size={52} color="var(--accent-cyan-bright)" style={{ opacity: 0.5, margin: '0 auto 1.25rem' }} />
               <h3 style={{ fontWeight: 800, margin: '0 0 0.5rem', fontFamily: 'Outfit, sans-serif', fontSize: '1.2rem' }}>
-                Ready to Scan Code AST
+                Ready to Scan Code AST & Data Flows
               </h3>
               <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem', maxWidth: 360, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
-                Click "Load Violating Code" or "Load Compliant Code" on the left and run analysis to extract behavior sinks.
+                Click "Load Violating Code" or "Load Compliant Code" on the left and run analysis to trace data flow pipelines.
               </p>
             </div>
           )}
 
           {result && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               {/* Header Card */}
               <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -331,20 +325,111 @@ export default function CodeAnalysis() {
                     border: '1px solid rgba(16, 185, 129, 0.3)',
                     borderRadius: 8, fontSize: '0.8rem', fontWeight: 800, color: 'var(--risk-compliant)'
                   }}>
-                    PARSED & SAVED
+                    PARSED & TRACED
                   </div>
                 </div>
               </div>
 
-              {/* Behavior Grid with Vivid Tones */}
+              {/* Affected Components Section */}
+              <div className="card" style={{ padding: '1.25rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--accent-purple)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Layers size={15} /> Affected Application Components ({result.behavior.affected_components?.length || 0})
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {result.behavior.affected_components && result.behavior.affected_components.length > 0 ? (
+                    result.behavior.affected_components.map((comp, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          background: 'rgba(139, 92, 246, 0.08)',
+                          border: '1px solid rgba(139, 92, 246, 0.3)',
+                          color: 'var(--accent-purple)',
+                          padding: '0.35rem 0.75rem',
+                          borderRadius: 8,
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                      >
+                        <Cpu size={13} /> {comp}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Main file execution module</span>
+                  )}
+                </div>
+              </div>
+
+              {/* End-to-End Data Flow Pipeline Trace */}
+              {result.behavior.data_flows && result.behavior.data_flows.length > 0 && (
+                <div className="card" style={{ padding: '1.25rem' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--accent-blue)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Network size={15} /> Identified Data Flows ({result.behavior.data_flows.length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    {result.behavior.data_flows.map((flow, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          background: 'var(--bg-secondary)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 10,
+                          padding: '1rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: 'JetBrains Mono, monospace', color: 'var(--accent-blue)' }}>
+                            {flow.id} • Line {flow.line || 1}
+                          </span>
+                          <span style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: flow.consent_guarded ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                            color: flow.consent_guarded ? 'var(--risk-compliant)' : 'var(--risk-high)',
+                            border: `1px solid ${flow.consent_guarded ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                          }}>
+                            {flow.consent_guarded ? '🛡️ Consent Guarded' : '⚠️ Unshielded Flow'}
+                          </span>
+                        </div>
+
+                        {/* Pipeline Step Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', gap: '0.5rem', alignItems: 'center' }}>
+                          <div style={{ background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 8, padding: '0.6rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--risk-high)', fontWeight: 800 }}>Source (Data)</div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{flow.source}</div>
+                          </div>
+
+                          <ArrowRight size={14} color="var(--text-muted)" />
+
+                          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.6rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 800 }}>Component</div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{flow.component}</div>
+                          </div>
+
+                          <ArrowRight size={14} color="var(--text-muted)" />
+
+                          <div style={{ background: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 8, padding: '0.6rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--accent-blue)', fontWeight: 800 }}>Sink (Destination)</div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{flow.sink}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Behavior Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>
                 {[
                   { label: '🔐 Sensitive Data Detected', items: result.behavior.sensitive_data, color: 'var(--risk-high-light)', bg: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.25)' },
                   { label: '🌐 Transmission Destinations', items: result.behavior.destinations, color: 'var(--risk-medium-light)', bg: 'rgba(245, 158, 11, 0.08)', border: 'rgba(245, 158, 11, 0.25)' },
                   { label: '🔌 Third-Party SDK Sinks', items: result.behavior.third_party_sdks, color: 'var(--accent-purple)', bg: 'rgba(139, 92, 246, 0.08)', border: 'rgba(139, 92, 246, 0.25)' },
                   { label: '📡 Network Egress Requests', items: result.behavior.network_requests, color: 'var(--accent-blue)', bg: 'rgba(59, 130, 246, 0.08)', border: 'rgba(59, 130, 246, 0.25)' },
-                  { label: '📝 Logging Output Events', items: result.behavior.logging_events, color: 'var(--accent-blue)', bg: 'rgba(59, 130, 246, 0.08)', border: 'rgba(59, 130, 246, 0.25)' },
-                  { label: '💾 Persistent Storage Ops', items: result.behavior.storage_operations, color: 'var(--risk-compliant)', bg: 'rgba(16, 185, 129, 0.08)', border: 'rgba(16, 185, 129, 0.25)' },
                 ].map(({ label, items, color, bg, border }) => (
                   <div key={label} className="card" style={{ padding: '1rem', background: bg, border: `1px solid ${border}` }}>
                     <div style={{ fontSize: '0.75rem', fontWeight: 800, color, marginBottom: '0.5rem', letterSpacing: '0.04em' }}>
@@ -437,7 +522,7 @@ export default function CodeAnalysis() {
                     Ready for Multi-Agent Comparison
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                    Cross-reference this code against your extracted policy rules to identify compliance drift.
+                    Cross-reference these data flows against policy rules to identify compliance drift.
                   </div>
                 </div>
                 <Link to="/drift" className="btn btn-primary" style={{ padding: '0.45rem 1rem', fontSize: '0.8rem' }}>

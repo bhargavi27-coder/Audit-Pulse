@@ -6,14 +6,14 @@ import { formatDate } from '../utils/helpers';
 import {
   Eye, Plus, RefreshCw, Trash2, ExternalLink, AlertTriangle,
   CheckCircle, Globe, Shield, Clock, Sparkles, AlertCircle, FileText,
-  Terminal, ArrowRight, Layers, Cpu, Zap
+  Terminal, ArrowRight, Layers, Cpu, Zap, Code2, Link2
 } from 'lucide-react';
 
 const COMMON_VENDORS = [
-  { name: 'Stripe', url: 'https://stripe.com/privacy' },
-  { name: 'Segment', url: 'https://segment.com/legal/privacy' },
-  { name: 'Mixpanel', url: 'https://mixpanel.com/legal/privacy-policy' },
-  { name: 'OpenAI', url: 'https://openai.com/policies/privacy-policy' },
+  { name: 'Stripe', url: 'https://stripe.com/privacy', affected_components: ['src/payments/stripe_client.py', 'frontend/src/components/CheckoutModal.jsx'] },
+  { name: 'Segment', url: 'https://segment.com/legal/privacy', affected_components: ['src/analytics/tracker.ts', 'backend/routes/user_events.py'] },
+  { name: 'Mixpanel', url: 'https://mixpanel.com/legal/privacy-policy', affected_components: ['frontend/src/utils/telemetry.js'] },
+  { name: 'OpenAI', url: 'https://openai.com/policies/privacy-policy', affected_components: ['backend/app/services/llm_service.py'] },
 ];
 
 export default function VendorMonitoring() {
@@ -23,7 +23,7 @@ export default function VendorMonitoring() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [diffViewMode, setDiffViewMode] = useState('summary'); // 'summary' | 'diff'
-  const [formData, setFormData] = useState({ name: '', url: '' });
+  const [formData, setFormData] = useState({ name: '', url: '', affected_components: '' });
   const [submitting, setSubmitting] = useState(false);
   const { toasts, showToast, removeToast } = useToast();
 
@@ -34,6 +34,9 @@ export default function VendorMonitoring() {
       // Auto-select first vendor or keep current
       if (res.data.length > 0 && !selectedVendor) {
         setSelectedVendor(res.data[0]);
+      } else if (selectedVendor) {
+        const updated = res.data.find(v => v.id === selectedVendor.id);
+        if (updated) setSelectedVendor(updated);
       }
     } catch (err) {
       showToast('Failed to load monitored vendors: ' + (err.userMessage || err.message), 'error');
@@ -54,9 +57,16 @@ export default function VendorMonitoring() {
     }
     setSubmitting(true);
     try {
-      await vendorsApi.create(formData);
+      const payload = {
+        name: formData.name,
+        url: formData.url,
+        affected_components: formData.affected_components
+          ? formData.affected_components.split(',').map(s => s.trim()).filter(Boolean)
+          : []
+      };
+      await vendorsApi.create(payload);
       showToast(`Vendor ${formData.name} added to Playwright monitoring!`, 'success');
-      setFormData({ name: '', url: '' });
+      setFormData({ name: '', url: '', affected_components: '' });
       setShowAddModal(false);
       fetchVendors();
     } catch (err) {
@@ -67,7 +77,11 @@ export default function VendorMonitoring() {
   };
 
   const handleQuickAdd = (preset) => {
-    setFormData({ name: preset.name, url: preset.url });
+    setFormData({
+      name: preset.name,
+      url: preset.url,
+      affected_components: preset.affected_components ? preset.affected_components.join(', ') : ''
+    });
     setShowAddModal(true);
   };
 
@@ -76,7 +90,7 @@ export default function VendorMonitoring() {
     try {
       const res = await vendorsApi.check(id);
       if (res.data.drift_detected) {
-        showToast(`Policy drift detected for ${name}! Review changes.`, 'warning');
+        showToast(`Policy drift detected for ${name}! Review affected components.`, 'warning');
       } else {
         showToast(`Playwright checked ${name}: Policy matched baseline.`, 'success');
       }
@@ -132,11 +146,11 @@ export default function VendorMonitoring() {
             }}>
               <Globe size={22} color="white" />
             </span>
-            <span className="gradient-text-cyan">Vendor Surveillance & Policy Drift</span>
+            <span className="gradient-text-cyan">Vendor Surveillance & Component Blast Radius</span>
           </h1>
           <p>
-            Continuous headless browser monitoring powered by Playwright. Detects covert Terms of Service,
-            GDPR subprocessor, and data retention policy modifications by third-party SaaS vendors.
+            Continuous headless browser monitoring powered by Playwright. Detects vendor Terms of Service changes
+            and automatically identifies which codebase components and data pipelines are affected.
           </p>
         </div>
 
@@ -186,14 +200,14 @@ export default function VendorMonitoring() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
               <span style={{ fontSize: '1.05rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>
-                Playwright Headless Browser Engine
+                Playwright Headless Browser Engine & Component Dependency Mapper
               </span>
               <span className="badge badge-compliant" style={{ fontSize: '0.68rem', padding: '2px 8px' }}>
                 ONLINE • v1.63.0
               </span>
             </div>
             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-              Chromium & WebKit headless runners ready. Supports Single-Page Apps (SPA), React/Vue renders, and dynamic JS payloads.
+              Monitors vendor TOS/privacy revisions and correlates drift with codebase pipelines & SDK invocations.
             </div>
           </div>
         </div>
@@ -222,7 +236,7 @@ export default function VendorMonitoring() {
       {/* Overview Stat Cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: '1.25rem',
         marginBottom: '2rem'
       }}>
@@ -242,6 +256,16 @@ export default function VendorMonitoring() {
             {vendors.filter(v => v.drift_detected).length}
           </div>
           <div className="stat-label">Active Policy Drifts</div>
+        </div>
+
+        <div className="stat-card blue">
+          <div className="stat-icon">
+            <Cpu size={22} color="var(--accent-indigo)" />
+          </div>
+          <div className="stat-value" style={{ color: 'var(--accent-indigo)' }}>
+            {vendors.reduce((acc, v) => acc + (v.affected_components?.length || 0), 0)}
+          </div>
+          <div className="stat-label">Connected Code Components</div>
         </div>
 
         <div className="stat-card green">
@@ -265,7 +289,7 @@ export default function VendorMonitoring() {
             No Monitored Vendors Configured
           </h3>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: 480, margin: '0 auto 1.5rem', lineHeight: 1.6 }}>
-            Track any vendor Terms of Service or Privacy Policy URL. AuditPulse uses Playwright to capture snapshots and detect silent clauses that violate your compliance.
+            Track any vendor Terms of Service or Privacy Policy URL. AuditPulse uses Playwright to capture snapshots and detect silent clauses that impact your codebase.
           </p>
           <div style={{ display: 'flex', gap: '0.85rem', justifyContent: 'center' }}>
             <button onClick={handleLoadDemo} className="btn btn-secondary">
@@ -298,6 +322,7 @@ export default function VendorMonitoring() {
             {vendors.map(vendor => {
               const isSelected = selectedVendor?.id === vendor.id;
               const isChecking = checkingId === vendor.id;
+              const affectedCount = vendor.affected_components?.length || 0;
 
               return (
                 <div
@@ -322,7 +347,7 @@ export default function VendorMonitoring() {
                         {vendor.drift_detected ? (
                           <span className="badge badge-high">
                             <AlertTriangle size={13} />
-                            Policy Drift
+                            Policy Drift Detected
                           </span>
                         ) : (
                           <span className="badge badge-compliant">
@@ -373,6 +398,40 @@ export default function VendorMonitoring() {
                     </div>
                   </div>
 
+                  {/* Affected Application Components Preview */}
+                  {affectedCount > 0 && (
+                    <div style={{
+                      margin: '0.75rem 0',
+                      padding: '0.6rem 0.85rem',
+                      background: vendor.drift_detected ? 'rgba(239, 68, 68, 0.05)' : 'rgba(59, 130, 246, 0.04)',
+                      borderRadius: 8,
+                      border: `1px solid ${vendor.drift_detected ? 'rgba(239, 68, 68, 0.18)' : 'rgba(59, 130, 246, 0.15)'}`
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 700, color: vendor.drift_detected ? 'var(--risk-high-light)' : 'var(--accent-indigo)', marginBottom: 4 }}>
+                        <Cpu size={13} />
+                        <span>Affected Application Components ({affectedCount}):</span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {vendor.affected_components.map((comp, idx) => (
+                          <span
+                            key={idx}
+                            style={{
+                              fontFamily: 'JetBrains Mono, monospace',
+                              fontSize: '0.72rem',
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              background: 'rgba(255, 255, 255, 0.06)',
+                              border: '1px solid var(--border)',
+                              color: 'var(--text-primary)'
+                            }}
+                          >
+                            {comp.split('/').pop()}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -403,7 +462,7 @@ export default function VendorMonitoring() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 2 }}>
                     <span style={{ fontSize: '0.72rem', color: 'var(--accent-indigo)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Inspector Panel
+                      Vendor Blast Radius Inspector
                     </span>
                   </div>
                   <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, fontFamily: 'Outfit, sans-serif' }}>
@@ -420,6 +479,51 @@ export default function VendorMonitoring() {
                 >
                   ✕
                 </button>
+              </div>
+
+              {/* Connected Application Components Section */}
+              <div style={{
+                marginBottom: '1.25rem',
+                padding: '1rem',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--border)',
+                borderRadius: 12
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan-bright)', marginBottom: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <Layers size={14} />
+                  <span>Mapped Codebase Blast Radius ({selectedVendor.affected_components?.length || 0})</span>
+                </div>
+                {selectedVendor.affected_components && selectedVendor.affected_components.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    {selectedVendor.affected_components.map((comp, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.45rem 0.75rem',
+                          background: 'rgba(0, 0, 0, 0.25)',
+                          borderRadius: 8,
+                          fontSize: '0.8rem',
+                          fontFamily: 'JetBrains Mono, monospace'
+                        }}
+                      >
+                        <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Code2 size={13} color="var(--accent-indigo)" />
+                          {comp}
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: selectedVendor.drift_detected ? 'var(--risk-high-light)' : 'var(--risk-compliant)', fontWeight: 700 }}>
+                          {selectedVendor.drift_detected ? 'IMPACTED BY DRIFT' : 'SYNCHRONIZED'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    No specific component paths linked yet.
+                  </div>
+                )}
               </div>
 
               {/* View Mode Toggle: Summary vs Full Diff */}
@@ -538,10 +642,10 @@ export default function VendorMonitoring() {
                       borderRadius: 12
                     }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-indigo)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Shield size={16} /> Compliance Guidance
+                        <Shield size={16} /> Remediation Strategy
                       </div>
                       <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-                        Review your customer privacy notice. If data retention exceeded your promised window, update contract terms or reconfigure third-party integration pipelines.
+                        Inspect the {selectedVendor.affected_components?.length || 0} connected codebase components listed above to adjust data transmission payloads or notify the legal department.
                       </p>
                     </div>
                   </div>
@@ -560,7 +664,7 @@ export default function VendorMonitoring() {
                     Policy Synced & Intact
                   </div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: 320, margin: '0 auto' }}>
-                    Playwright confirmed no textual modifications since the baseline check. Terms remain valid.
+                    Playwright confirmed no textual modifications since the baseline check. Connected components are safe.
                   </div>
                 </div>
               )}
@@ -621,8 +725,21 @@ export default function VendorMonitoring() {
                     onChange={(e) => setFormData({ ...formData, url: e.target.value })}
                     required
                   />
+                </div>
+
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                    Affected Code Components (Comma-separated file paths)
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g. src/analytics/tracker.ts, backend/routes/events.py"
+                    value={formData.affected_components}
+                    onChange={(e) => setFormData({ ...formData, affected_components: e.target.value })}
+                  />
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 6, display: 'block' }}>
-                    Playwright will launch a headless browser session to extract full DOM text, including client-side rendered Single Page Apps.
+                    Identifies which codebase components are impacted if this vendor alters their terms.
                   </span>
                 </div>
               </div>
@@ -651,3 +768,4 @@ export default function VendorMonitoring() {
     </div>
   );
 }
+
