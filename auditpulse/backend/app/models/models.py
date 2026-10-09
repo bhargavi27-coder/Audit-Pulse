@@ -13,6 +13,20 @@ import enum
 from app.database import Base
 
 
+class User(Base):
+    """Registered AuditPulse user account"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String(255), nullable=False)
+    email = Column(String(320), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    organization = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class RiskLevel(str, enum.Enum):
     HIGH = "HIGH"
     MEDIUM = "MEDIUM"
@@ -51,7 +65,7 @@ class Policy(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    rules = relationship("PolicyRule", back_populates="policy", cascade="all, delete-orphan")
+    rules = relationship("PolicyRule", back_populates="policy", cascade="all, delete-orphan", lazy="selectin")
     findings = relationship("Finding", back_populates="policy")
     parent = relationship("Policy", remote_side=[id], backref="child_versions")
 
@@ -150,7 +164,7 @@ class Finding(Base):
     # Relationships
     policy = relationship("Policy", back_populates="findings")
     code_analysis = relationship("CodeAnalysis", back_populates="findings")
-    timeline = relationship("FindingTimeline", back_populates="finding", cascade="all, delete-orphan")
+    timeline = relationship("FindingTimeline", back_populates="finding", cascade="all, delete-orphan", lazy="selectin")
 
 
 class FindingTimeline(Base):

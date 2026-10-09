@@ -17,6 +17,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // If 401 and we have a stored token, it's expired/invalid — clear it
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auditpulse_token');
+    }
     const detail = error.response?.data?.detail;
     const message = Array.isArray(detail)
       ? detail.map((issue) => {
@@ -33,6 +37,7 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
 
 // ===== Policy API =====
 export const policyApi = {
@@ -106,4 +111,13 @@ export const reportsApi = {
   getExportHtmlUrl: () => '/api/reports/export/html',
 };
 
+// ===== Auth API =====
+export const authApi = {
+  signup: (data) => api.post('/auth/signup', data),
+  signin: (data) => api.post('/auth/signin', data),
+  logout: () => api.post('/auth/logout'),
+  me: () => api.get('/auth/me'),
+};
+
 export default api;
+

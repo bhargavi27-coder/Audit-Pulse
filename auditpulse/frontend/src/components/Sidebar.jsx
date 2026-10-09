@@ -1,12 +1,15 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Shield, LayoutDashboard, FileText, Code2, GitBranch,
-  Eye, BarChart3, Settings, Zap, AlertTriangle, Globe
+  Eye, BarChart3, Settings, Zap, AlertTriangle, Globe,
+  LogOut, User
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, badge: null },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
   { to: '/policy', label: 'Policy Analysis', icon: FileText, badge: 'Agent' },
   { to: '/code', label: 'Code Analysis', icon: Code2, badge: 'AST' },
   { to: '/drift', label: 'Drift Detection', icon: GitBranch, badge: 'Core' },
@@ -16,7 +19,16 @@ const navItems = [
 ];
 
 export default function Sidebar() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/', { replace: true });
+  };
+
   return (
+
     <aside className="sidebar">
       {/* Brand Logo */}
       <div style={{ padding: '0.5rem 1.5rem 1.75rem' }}>
@@ -115,7 +127,7 @@ export default function Sidebar() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            end={to === '/dashboard'}
             className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
             style={{ borderRadius: 10, margin: '3px 0' }}
           >
@@ -147,9 +159,63 @@ export default function Sidebar() {
         ))}
       </nav>
 
+      {/* User Profile + Logout */}
+      {user && (
+        <div style={{ padding: '0 1.25rem 0.75rem' }}>
+          <div style={{
+            padding: '0.75rem 0.85rem',
+            background: 'rgba(99,102,241,0.08)',
+            border: '1px solid rgba(99,102,241,0.2)',
+            borderRadius: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.6rem',
+          }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <User size={16} color="white" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: '0.78rem', fontWeight: 700, color: '#e2e8ff',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {user.full_name}
+              </div>
+              <div style={{
+                fontSize: '0.65rem', color: 'var(--text-muted)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {user.email}
+              </div>
+            </div>
+            <button
+              id="sidebar-logout-btn"
+              onClick={handleLogout}
+              title="Sign out"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--text-muted)', padding: '4px',
+                borderRadius: 6, display: 'flex', alignItems: 'center',
+                transition: 'color 0.2s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Bottom Legal Disclaimer */}
       <div style={{
-        padding: '1rem 1.25rem',
+        padding: '0.5rem 1.25rem 1rem',
         borderTop: '1px solid var(--border)',
         marginTop: '0.5rem',
       }}>
@@ -167,5 +233,6 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+
   );
 }

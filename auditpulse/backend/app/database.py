@@ -73,6 +73,7 @@ async def create_tables():
                 ("policies", "version_notes", "TEXT"),
                 ("vendors", "affected_components", "JSON"),
             ]
+
             for table, col, col_type in columns_to_add:
                 try:
                     await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type};"))

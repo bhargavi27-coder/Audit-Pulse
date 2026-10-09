@@ -1,5 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import PolicyAnalysis from './pages/PolicyAnalysis';
@@ -8,14 +10,18 @@ import DriftDetection from './pages/DriftDetection';
 import VendorMonitoring from './pages/VendorMonitoring';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
-import { GitBranch, Globe, Sparkles } from 'lucide-react';
+import LandingPage from './pages/LandingPage';
+import SignInPage from './pages/SignInPage';
+import SignUpPage from './pages/SignUpPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import { GitBranch, Globe } from 'lucide-react';
 
 function TopNav() {
   const location = useLocation();
 
   const getPageInfo = (pathname) => {
     switch (pathname) {
-      case '/':
+      case '/dashboard':
         return { title: 'Executive Compliance Overview', category: 'Analytics' };
       case '/policy':
         return { title: 'Policy Parser & Rule Extractor', category: 'Legal Agent' };
@@ -150,27 +156,94 @@ function TopNav() {
   );
 }
 
+/** Layout wrapper used for all protected dashboard pages */
+function DashboardLayout({ children }) {
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
+      <Sidebar />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <TopNav />
+        <main className="main-content" style={{ marginTop: 0, paddingTop: '1.75rem' }}>
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
-        <Sidebar />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <TopNav />
-          <main className="main-content" style={{ marginTop: 0, paddingTop: '1.75rem' }}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/policy" element={<PolicyAnalysis />} />
-              <Route path="/code" element={<CodeAnalysis />} />
-              <Route path="/drift" element={<DriftDetection />} />
-              <Route path="/vendors" element={<VendorMonitoring />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </main>
-        </div>
-      </div>
+      <AuthProvider>
+        <Routes>
+          {/* ── Public routes ── */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/signin" element={<SignInPage />} />
+          <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
+          {/* ── Protected dashboard routes ── */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout><Dashboard /></DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/policy"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout><PolicyAnalysis /></DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/code"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout><CodeAnalysis /></DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/drift"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout><DriftDetection /></DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/vendors"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout><VendorMonitoring /></DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout><Reports /></DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout><Settings /></DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ── Catch-all: redirect to landing ── */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

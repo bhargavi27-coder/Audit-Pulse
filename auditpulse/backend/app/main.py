@@ -8,12 +8,14 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import settings
 from app.database import create_tables
+from app.models import models  # noqa: F401 — ensures all ORM models are registered before create_all()
 from app.routes.policies import router as policies_router
 from app.routes.code import router as code_router
 from app.routes.compliance import router as compliance_router
 from app.routes.vendors import router as vendors_router
 from app.routes.dashboard import dashboard_router, github_router
 from app.routes.reports import router as reports_router
+from app.routes.auth import router as auth_router
 
 
 @asynccontextmanager
@@ -62,6 +64,7 @@ app.add_middleware(
 )
 
 # ===== Routes =====
+app.include_router(auth_router)
 app.include_router(policies_router)
 app.include_router(code_router)
 app.include_router(compliance_router)
