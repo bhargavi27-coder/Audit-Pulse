@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     )
 
     # CORS
-    cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    cors_origins: str = "*"
 
     # AI Provider
     ai_provider: str = "mock"  # openai | anthropic | google | mock

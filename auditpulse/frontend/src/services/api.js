@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const rawBaseURL = import.meta.env.VITE_API_BASE_URL || '';
+const rawBaseURL = import.meta.env.VITE_API_BASE_URL
+  || (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+      ? 'https://audit-pulse-backend.vercel.app'
+      : '');
+
 const api = axios.create({
   baseURL: rawBaseURL ? `${rawBaseURL.replace(/\/$/, '')}/api` : '/api',
   timeout: 120000,
