@@ -18,8 +18,16 @@ class Settings(BaseSettings):
     app_secret_key: str = "dev-secret-key-change-in-production"
 
     # Database (SQLite default for zero-config local run, or PostgreSQL via .env)
-    database_url: str = "sqlite+aiosqlite:///./auditpulse.db"
-    database_sync_url: str = "sqlite:///./auditpulse.db"
+    database_url: str = (
+        "sqlite+aiosqlite:////tmp/auditpulse.db"
+        if os.getenv("VERCEL")
+        else "sqlite+aiosqlite:///./auditpulse.db"
+    )
+    database_sync_url: str = (
+        "sqlite:////tmp/auditpulse.db"
+        if os.getenv("VERCEL")
+        else "sqlite:///./auditpulse.db"
+    )
 
     # CORS
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
