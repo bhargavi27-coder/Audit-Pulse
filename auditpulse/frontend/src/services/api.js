@@ -1,12 +1,17 @@
 import axios from 'axios';
 
-const rawBaseURL = import.meta.env.VITE_API_BASE_URL
-  || (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-      ? 'https://audit-pulse-backend.vercel.app'
-      : '');
+// ── Backend URL Resolution ──────────────────────────────────────────
+// Priority: env var → deployed backend (non-localhost) → relative /api (localhost)
+const DEPLOYED_BACKEND = 'https://audit-pulse-backend.vercel.app';
+
+const isLocalhost = typeof window !== 'undefined'
+  && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const backendBase = import.meta.env.VITE_API_BASE_URL
+  || (isLocalhost ? '' : DEPLOYED_BACKEND);
 
 const api = axios.create({
-  baseURL: rawBaseURL ? `${rawBaseURL.replace(/\/$/, '')}/api` : '/api',
+  baseURL: backendBase ? `${backendBase.replace(/\/$/, '')}/api` : '/api',
   timeout: 120000,
   headers: { 'Content-Type': 'application/json' },
 });
